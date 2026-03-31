@@ -29,11 +29,15 @@ void _exit(int status) {
 }
 
 int _open(const char *path, int flags, mode_t mode) {
-  if (path == NULL) {
-    errno = EINVAL;
-    return -1;
-  }
-  return (int)_syscall_(SYS_open, (intptr_t)path, flags, mode);
+    if (path == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+    int ret = (int)_syscall_(SYS_open, (intptr_t)path, flags, mode);
+    if (ret < 0) {
+        errno = -ret;  // 假设内核返回负的错误码
+    }
+    return ret;
 }
 
 ssize_t _read(int fd, void *buf, size_t count) {

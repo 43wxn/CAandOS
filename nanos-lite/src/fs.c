@@ -117,11 +117,11 @@ size_t fs_lseek(int fd, off_t offset, int whence) {
   Finfo *f = &file_table[fd];
 
   // /proc/dispinfo 约定不支持 lseek, 忽略 offset
-  if (fd == FD_DISPINFO) {
-    f->open_offset = 0;
-    return 0;
-  }
-
+    if (fd == FD_EVENTS || fd == FD_DISPINFO || fd == FD_FB || 
+        fd == FD_STDIN || fd == FD_STDOUT || fd == FD_STDERR) {
+        f->open_offset = 0;
+        return 0;
+    }
   off_t new_offset = 0;
   switch (whence) {
     case SEEK_SET: new_offset = offset; break;

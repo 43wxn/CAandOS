@@ -5,6 +5,7 @@
 #include <sys/time.h>
 #include "syscall.h"
 
+static uintptr_t current_brk = 0;
 void do_syscall(Context *c) {
   uintptr_t a[4];
   a[0] = c->GPR1;
@@ -61,10 +62,22 @@ void do_syscall(Context *c) {
       Log("SYS_fstat -> %d", c->GPRx);
       break;
 
-    case SYS_brk:
-      Log("SYS_brk(brk=%p)", (void *)a[1]);
-      c->GPRx = 0;
-      break;
+    case SYS_brk: {
+        uintptr_t new_brk = a[1];
+        if (new_brk == 0) {
+            // 获取当前brk
+            if (current_brk == 0) {
+                extern char _end;
+                current_brk = (uintptr_t)&_end;
+            }
+            c->GPRx = current_brk;
+        } else {
+            // 设置新brk
+            current_brk = new_brk;
+            c->GPRx = 0;
+        }
+        break;
+    }
 
     case SYS_gettimeofday: {
       struct timeval *tv = (struct timeval *)a[1];
