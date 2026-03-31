@@ -3,40 +3,83 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <sys/time.h>
+#include <assert.h>
 
 static int evtdev = -1;
 static int fbdev = -1;
+static int dispdev = -1;
+
 static int screen_w = 0, screen_h = 0;
+static int canvas_w = 0, canvas_h = 0;
+static int canvas_x = 0, canvas_y = 0;
 
 uint32_t NDL_GetTicks() {
-  return 0;
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  return tv.tv_sec * 1000u + tv.tv_usec / 1000;
 }
 
 int NDL_PollEvent(char *buf, int len) {
-  return 0;
+  if (evtdev < 0) return 0;
+  int n = read(evtdev, buf, len);
+  return n;
 }
 
 void NDL_OpenCanvas(int *w, int *h) {
+  if (dispdev < 0) {
+    dispdev = open("/proc/dispinfo", O_RDONLY, 0);
+    assert(dispdev >= 0);
+  }
+  if (fbdev < 0) {
+    fbdev = open("/dev/fb", O_WRONLY, 0);
+    assert(fbdev >= 0);
+  }
+
+  char buf[128] = {};
+  int n = read(dispdev, buf, sizeof(buf) - 1);
+  assert(n > 0);
+  buf[n] = '\0';
+
+  sscanf(buf, "WIDTH:%d\nHEIGHT:%d\n", &screen_w, &screen_h);
+
+  if (*w == 0 || *h == 0) {
+    canvas_w = screen_w;
+    canvas_h = screen_h;
+    *w = canvas_w;
+    *h = canvas_h;
+  } else {
+    assert(*w <= screen_w && *h <= screen_h);
+    canvas_w = *w;
+    canvas_h = *h;
+  }
+
+  canvas_x = (screen_w - canvas_w) / 2;
+  canvas_y = (screen_h - canvas_h) / 2;
+
   if (getenv("NWM_APP")) {
     int fbctl = 4;
-    fbdev = 5;
-    screen_w = *w; screen_h = *h;
-    char buf[64];
-    int len = sprintf(buf, "%d %d", screen_w, screen_h);
-    // let NWM resize the window and create the frame buffer
-    write(fbctl, buf, len);
+    char tmp[64];
+    int l = sprintf(tmp, "%d %d", canvas_w, canvas_h);
+    write(fbctl, tmp, l);
     while (1) {
-      // 3 = evtdev
-      int nread = read(3, buf, sizeof(buf) - 1);
-      if (nread <= 0) continue;
-      buf[nread] = '\0';
-      if (strcmp(buf, "mmap ok") == 0) break;
+      int nr = read(3, tmp, sizeof(tmp) - 1);
+      if (nr <= 0) continue;
+      tmp[nr] = '\0';
+      if (strcmp(tmp, "mmap ok") == 0) break;
     }
     close(fbctl);
   }
 }
 
 void NDL_DrawRect(uint32_t *pixels, int x, int y, int w, int h) {
+  assert(fbdev >= 0);
+  for (int j = 0; j < h; j++) {
+    off_t off = ((canvas_y + y + j) * screen_w + (canvas_x + x)) * 4;
+    write(fbdev, pixels + j * w, w * 4);
+    lseek(fbdev, off + w * 4, SEEK_SET); // 为下一行准备，兼容简单实现
+  }
 }
 
 void NDL_OpenAudio(int freq, int channels, int samples) {
@@ -54,11 +97,16 @@ int NDL_QueryAudio() {
 }
 
 int NDL_Init(uint32_t flags) {
-  if (getenv("NWM_APP")) {
-    evtdev = 3;
-  }
+  (void)flags;
+  evtdev = open("/dev/events", O_RDONLY, 0);
+  dispdev = open("/proc/dispinfo", O_RDONLY, 0);
+  fbdev = open("/dev/fb", O_WRONLY, 0);
   return 0;
 }
 
 void NDL_Quit() {
+  if (evtdev >= 0) close(evtdev);
+  if (dispdev >= 0) close(dispdev);
+  if (fbdev >= 0) close(fbdev);
+  evtdev = dispdev = fbdev = -1;
 }

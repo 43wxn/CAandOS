@@ -2,6 +2,7 @@
 #include <am.h>
 #include <fs.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include "syscall.h"
 
 void do_syscall(Context *c) {
@@ -64,6 +65,17 @@ void do_syscall(Context *c) {
       Log("SYS_brk(brk=%p)", (void *)a[1]);
       c->GPRx = 0;
       break;
+
+    case SYS_gettimeofday: {
+      struct timeval *tv = (struct timeval *)a[1];
+      AM_TIMER_UPTIME_T us = io_read(AM_TIMER_UPTIME);
+      if (tv != NULL) {
+        tv->tv_sec = us.us / 1000000;
+        tv->tv_usec = us.us % 1000000;
+      }
+      c->GPRx = 0;
+      break;
+    }
 
     default:
       panic("Unhandled syscall ID = %d", a[0]);
