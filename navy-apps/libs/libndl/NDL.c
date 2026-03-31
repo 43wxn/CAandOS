@@ -98,6 +98,7 @@ int NDL_QueryAudio() {
 
 int NDL_Init(uint32_t flags) {
   (void)flags;
+  write(1, "NDL_Init\n", 9);
   evtdev = open("/dev/events", O_RDONLY, 0);
   dispdev = open("/proc/dispinfo", O_RDONLY, 0);
   fbdev = open("/dev/fb", O_WRONLY, 0);
