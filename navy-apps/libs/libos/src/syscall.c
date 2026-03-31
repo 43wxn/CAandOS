@@ -5,23 +5,24 @@
 #include <errno.h>
 #include "syscall.h"
 
-intptr_t _syscall_(intptr_t type, intptr_t arg0, intptr_t arg1, intptr_t arg2) {
-  register intptr_t a0 asm("a0") = arg0;
-  register intptr_t a1 asm("a1") = arg1;
-  register intptr_t a2 asm("a2") = arg2;
-  register intptr_t a7 asm("a7") = type;
+intptr_t _syscall_(intptr_t type, intptr_t a0, intptr_t a1, intptr_t a2) {
+  register intptr_t _a7 asm ("a7") = type;
+  register intptr_t _a0 asm ("a0") = a0;
+  register intptr_t _a1 asm ("a1") = a1;
+  register intptr_t _a2 asm ("a2") = a2;
 
   asm volatile (
     "ecall"
-    : "+r"(a0)
-    : "r"(a1), "r"(a2), "r"(a7)
+    : "+r"(_a0)
+    : "r"(_a7), "r"(_a1), "r"(_a2)
     : "memory",
       "a3", "a4", "a5", "a6",
       "t0", "t1", "t2", "t3", "t4", "t5", "t6"
   );
 
-  return a0;
+  return _a0;
 }
+
 void _exit(int status) {
   _syscall_(SYS_exit, status, 0, 0);
   while (1) {}
