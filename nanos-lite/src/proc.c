@@ -24,7 +24,7 @@ void hello_fun(void *arg) {
 void init_proc() {
   switch_boot_pcb();
   Log("Initializing processes...");
-  naive_uload(NULL, "/bin/event-test");   // 或 /bin/file-test
+  naive_uload(NULL, "/bin/bmp-test");   // 或 /bin/file-test
 }
 
 Context* schedule(Context *prev) {
