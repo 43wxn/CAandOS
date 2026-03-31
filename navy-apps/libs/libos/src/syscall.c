@@ -8,9 +8,7 @@
 #include <errno.h>
 #include "syscall.h"
 
-// 一个更稳的 RISC-V ecall 包装：显式把参数搬到 a0/a1/a2/a7
-// 避免“加点调试就变好/变坏”的寄存器分配问题
-static inline intptr_t _syscall_(intptr_t type, intptr_t arg0, intptr_t arg1, intptr_t arg2) {
+intptr_t _syscall_(intptr_t type, intptr_t arg0, intptr_t arg1, intptr_t arg2) {
   intptr_t ret;
   asm volatile (
     "mv a7, %1\n"
@@ -21,9 +19,7 @@ static inline intptr_t _syscall_(intptr_t type, intptr_t arg0, intptr_t arg1, in
     "mv %0, a0\n"
     : "=r"(ret)
     : "r"(type), "r"(arg0), "r"(arg1), "r"(arg2)
-    : "a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7",
-      "t0", "t1", "t2", "t3", "t4", "t5", "t6",
-      "memory"
+    : "a0", "a1", "a2", "a7", "memory"
   );
   return ret;
 }
@@ -69,9 +65,7 @@ void *_sbrk(intptr_t increment) {
   extern char _end;
   static uintptr_t cur_brk = 0;
 
-  if (cur_brk == 0) {
-    cur_brk = (uintptr_t)&_end;
-  }
+  if (cur_brk == 0) cur_brk = (uintptr_t)&_end;
 
   uintptr_t old_brk = cur_brk;
   uintptr_t new_brk = cur_brk + increment;
@@ -99,30 +93,24 @@ int _gettimeofday(struct timeval *tv, struct timezone *tz) {
 }
 
 int _execve(const char *fname, char * const argv[], char *const envp[]) {
-  (void)fname;
-  (void)argv;
-  (void)envp;
+  (void)fname; (void)argv; (void)envp;
   errno = ENOSYS;
   return -1;
 }
 
 int _stat(const char *fname, struct stat *buf) {
-  (void)fname;
-  (void)buf;
+  (void)fname; (void)buf;
   errno = ENOSYS;
   return -1;
 }
 
 int _kill(int pid, int sig) {
-  (void)pid;
-  (void)sig;
+  (void)pid; (void)sig;
   errno = ENOSYS;
   return -1;
 }
 
-pid_t _getpid() {
-  return 1;
-}
+pid_t _getpid() { return 1; }
 
 pid_t _fork() {
   errno = ENOSYS;
@@ -135,8 +123,7 @@ pid_t vfork() {
 }
 
 int _link(const char *d, const char *n) {
-  (void)d;
-  (void)n;
+  (void)d; (void)n;
   errno = ENOSYS;
   return -1;
 }
@@ -172,8 +159,7 @@ int dup(int oldfd) {
 }
 
 int dup2(int oldfd, int newfd) {
-  (void)oldfd;
-  (void)newfd;
+  (void)oldfd; (void)newfd;
   errno = ENOSYS;
   return -1;
 }
@@ -185,23 +171,19 @@ unsigned int sleep(unsigned int seconds) {
 }
 
 ssize_t readlink(const char *pathname, char *buf, size_t bufsiz) {
-  (void)pathname;
-  (void)buf;
-  (void)bufsiz;
+  (void)pathname; (void)buf; (void)bufsiz;
   errno = ENOSYS;
   return -1;
 }
 
 int symlink(const char *target, const char *linkpath) {
-  (void)target;
-  (void)linkpath;
+  (void)target; (void)linkpath;
   errno = ENOSYS;
   return -1;
 }
 
 int ioctl(int fd, unsigned long request, ...) {
-  (void)fd;
-  (void)request;
+  (void)fd; (void)request;
   errno = ENOSYS;
   return -1;
 }
