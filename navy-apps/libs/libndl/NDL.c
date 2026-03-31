@@ -77,8 +77,8 @@ void NDL_DrawRect(uint32_t *pixels, int x, int y, int w, int h) {
   assert(fbdev >= 0);
   for (int j = 0; j < h; j++) {
     off_t off = ((canvas_y + y + j) * screen_w + (canvas_x + x)) * 4;
+    lseek(fbdev, off, SEEK_SET);
     write(fbdev, pixels + j * w, w * 4);
-    lseek(fbdev, off + w * 4, SEEK_SET); // 为下一行准备，兼容简单实现
   }
 }
 
