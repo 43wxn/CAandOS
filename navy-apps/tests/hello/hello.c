@@ -1,8 +1,9 @@
 #include <unistd.h>
-
+#include <stdio.h>
 int main() {
-  write(1, "HELLO_MARKER_20260401\n", 22);
   write(1, "HELLO_MARKER_20260402\n", 22);
+  printf("ceshi\n");
+  write(1, "HELLO_MARKER_20260401\n", 22);
   int i = 2;
   write(1, "HELLO_MARKER_20260403\n", 22);
   volatile int j = 0;
