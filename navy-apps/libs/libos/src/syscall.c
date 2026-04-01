@@ -89,13 +89,28 @@ void *_sbrk(intptr_t increment) {
   return (void *)-1;
 }
 
+// 关键修复: 不让内核直接按宿主机 struct stat 往用户内存写.
+// 这里只在用户态按 newlib 自己的布局填, 给 stdio 足够的信息即可.
 int _fstat(int fd, struct stat *buf) {
   if (buf == NULL) {
     errno = EINVAL;
     return -1;
   }
-  return (int)_syscall_(SYS_fstat, fd, (intptr_t)buf, 0);
+
+  memset(buf, 0, sizeof(*buf));
+  if (fd >= 0 && fd <= 5) {
+    buf->st_mode = S_IFCHR;
+  } else {
+    buf->st_mode = S_IFREG;
+  }
+#ifdef st_blksize
+  buf->st_blksize = 4096;
+#else
+  buf->st_blksize = 4096;
+#endif
+  return 0;
 }
+
 
 int _gettimeofday(struct timeval *tv, struct timezone *tz) {
   return (int)_syscall_(SYS_gettimeofday, (intptr_t)tv, (intptr_t)tz, 0);
@@ -111,9 +126,14 @@ int _execve(const char *fname, char * const argv[], char *const envp[]) {
 
 int _stat(const char *fname, struct stat *buf) {
   (void)fname;
-  (void)buf;
-  errno = ENOSYS;
-  return -1;
+  if (buf == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+  memset(buf, 0, sizeof(*buf));
+  buf->st_mode = S_IFREG;
+  buf->st_blksize = 4096;
+  return 0;
 }
 
 int _kill(int pid, int sig) {

@@ -18,10 +18,10 @@ void init_proc() {
 
   // 每次只保留一个测试程序
   // naive_uload(NULL, "/bin/hello");
+  // naive_uload(NULL, "/bin/file-test");
   // naive_uload(NULL, "/bin/timer-test");
   // naive_uload(NULL, "/bin/event-test");
-  // naive_uload(NULL, "/bin/bmp-test");
-  naive_uload(NULL, "/bin/event-test");
+  naive_uload(NULL, "/bin/bmp-test");
 }
 
 Context* schedule(Context *prev) {

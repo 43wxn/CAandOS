@@ -71,7 +71,8 @@ size_t fb_write(const void *buf, size_t offset, size_t len) {
     int nr = w - x;
     if ((size_t)nr > pixel_cnt) nr = (int)pixel_cnt;
 
-    io_write(AM_GPU_FBDRAW, x, y, (void *)pixels, nr, 1, false);
+    // 按 PA 参考做法, 每一行直接 sync=true, 行为最稳
+    io_write(AM_GPU_FBDRAW, x, y, (void *)pixels, nr, 1, true);
 
     pixels += nr;
     pixel_cnt -= nr;
@@ -79,7 +80,6 @@ size_t fb_write(const void *buf, size_t offset, size_t len) {
     y++;
   }
 
-  io_write(AM_GPU_FBDRAW, 0, 0, NULL, 0, 0, true);
   return len;
 }
 

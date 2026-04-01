@@ -1,9 +1,21 @@
 #include <common.h>
 #include <am.h>
 #include <fs.h>
-#include <sys/stat.h>
-#include <sys/time.h>
+#include <stdint.h>
 #include "syscall.h"
+
+// 注意: 这里不能直接用宿主机的 <sys/time.h>/<sys/stat.h> 结构体写用户内存,
+// 否则在 riscv32 用户程序下很容易把栈/堆写坏.
+// PA3 的用户程序是 32-bit, 因此这里手动定义一个兼容布局.
+typedef struct {
+  int32_t tv_sec;
+  int32_t tv_usec;
+} riscv32_timeval;
+
+typedef struct {
+  int32_t tz_minuteswest;
+  int32_t tz_dsttime;
+} riscv32_timezone;
 
 void do_syscall(Context *c) {
   uintptr_t a[4];
@@ -24,7 +36,7 @@ void do_syscall(Context *c) {
       break;
 
     case SYS_open:
-      c->GPRx = fs_open((const char *)a[1], a[2], a[3]);
+      c->GPRx = fs_open((const char *)a[1], (int)a[2], (int)a[3]);
       break;
 
     case SYS_read:
@@ -44,7 +56,8 @@ void do_syscall(Context *c) {
       break;
 
     case SYS_fstat:
-      c->GPRx = fs_fstat((int)a[1], (struct stat *)a[2]);
+      // 让用户态 libos 自己填充 struct stat, 避免宿主机/用户态 ABI 不一致
+      c->GPRx = 0;
       break;
 
     case SYS_brk:
@@ -52,12 +65,13 @@ void do_syscall(Context *c) {
       break;
 
     case SYS_gettimeofday: {
-      struct timeval *tv = (struct timeval *)a[1];
-      struct timezone *tz = (struct timezone *)a[2];
+      riscv32_timeval *tv = (riscv32_timeval *)a[1];
+      riscv32_timezone *tz = (riscv32_timezone *)a[2];
       AM_TIMER_UPTIME_T uptime = io_read(AM_TIMER_UPTIME);
+
       if (tv != NULL) {
-        tv->tv_sec = uptime.us / 1000000;
-        tv->tv_usec = uptime.us % 1000000;
+        tv->tv_sec  = (int32_t)(uptime.us / 1000000);
+        tv->tv_usec = (int32_t)(uptime.us % 1000000);
       }
       if (tz != NULL) {
         tz->tz_minuteswest = 0;
