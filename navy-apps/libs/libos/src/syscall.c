@@ -82,7 +82,9 @@ ssize_t _read(int fd, void *buf, size_t count) {
     errno = EINVAL;
     return -1;
   }
-  return (ssize_t)_syscall_(SYS_read, fd, (intptr_t)buf, count);
+  ssize_t ret = (ssize_t)_syscall_(SYS_read, fd, (intptr_t)buf, count);
+  printf("DEBUG _read ret = %d\n", (int)ret);
+  return ret;
 }
 
 ssize_t _write(int fd, const void *buf, size_t count) {
