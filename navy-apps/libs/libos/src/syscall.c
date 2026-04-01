@@ -5,22 +5,48 @@
 #include <errno.h>
 #include "syscall.h"
 
+#define _concat(x, y) x ## y
+#define concat(x, y) _concat(x, y)
+#define _args(n, list) concat(_arg, n) list
+#define _arg0(a0, ...) a0
+#define _arg1(a0, a1, ...) a1
+#define _arg2(a0, a1, a2, ...) a2
+#define _arg3(a0, a1, a2, a3, ...) a3
+#define _arg4(a0, a1, a2, a3, a4, ...) a4
+#define _arg5(a0, a1, a2, a3, a4, a5, ...) a5
+
+#define SYSCALL _args(0, ARGS_ARRAY)
+#define GPR1    _args(1, ARGS_ARRAY)
+#define GPR2    _args(2, ARGS_ARRAY)
+#define GPR3    _args(3, ARGS_ARRAY)
+#define GPR4    _args(4, ARGS_ARRAY)
+#define GPRx    _args(5, ARGS_ARRAY)
+
+#if defined(__riscv)
+# ifdef __riscv_e
+#  define ARGS_ARRAY ("ecall", "a5", "a0", "a1", "a2", "a0")
+# else
+#  define ARGS_ARRAY ("ecall", "a7", "a0", "a1", "a2", "a0")
+# endif
+#else
+# error unsupported ISA
+#endif
+
 intptr_t _syscall_(intptr_t type, intptr_t a0, intptr_t a1, intptr_t a2) {
-  register intptr_t _a7 asm ("a7") = type;
-  register intptr_t _a0 asm ("a0") = a0;
-  register intptr_t _a1 asm ("a1") = a1;
-  register intptr_t _a2 asm ("a2") = a2;
+  register intptr_t _gpr1 asm (GPR1) = type;
+  register intptr_t _gpr2 asm (GPR2) = a0;
+  register intptr_t _gpr3 asm (GPR3) = a1;
+  register intptr_t _gpr4 asm (GPR4) = a2;
+  register intptr_t ret   asm (GPRx);
 
   asm volatile (
-    "ecall"
-    : "+r"(_a0)
-    : "r"(_a7), "r"(_a1), "r"(_a2)
-    : "memory",
-      "a3", "a4", "a5", "a6",
-      "t0", "t1", "t2", "t3", "t4", "t5", "t6"
+    SYSCALL
+    : "=r"(ret)
+    : "r"(_gpr1), "r"(_gpr2), "r"(_gpr3), "r"(_gpr4)
+    : "memory"
   );
 
-  return _a0;
+  return ret;
 }
 
 void _exit(int status) {
