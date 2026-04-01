@@ -15,7 +15,7 @@ void switch_boot_pcb() {
 void init_proc() {
   switch_boot_pcb();
   Log("Initializing processes...");
-  naive_uload(NULL, "/bin/hello");
+  naive_uload(NULL, "/bin/file-test");
 }
 
 Context* schedule(Context *prev) {
