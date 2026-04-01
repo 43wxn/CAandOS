@@ -55,15 +55,16 @@ void _exit(int status) {
 }
 
 int _open(const char *path, int flags, mode_t mode) {
-    if (path == NULL) {
-        errno = EINVAL;
-        return -1;
-    }
-    int ret = (int)_syscall_(SYS_open, (intptr_t)path, flags, mode);
-    if (ret < 0) {
-        errno = -ret;  // 假设内核返回负的错误码
-    }
-    return ret;
+  if (path == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+  int ret = (int)_syscall_(SYS_open, (intptr_t)path, flags, mode);
+  if (ret < 0) {
+    errno = ENOENT;
+    return -1;
+  }
+  return ret;
 }
 
 ssize_t _read(int fd, void *buf, size_t count) {
@@ -123,7 +124,21 @@ int _gettimeofday(struct timeval *tv, struct timezone *tz) {
 
 /* 以下这些先保持占位 */
 int _execve(const char *fname, char * const argv[], char *const envp[]) { errno = ENOSYS; return -1; }
-int _stat(const char *fname, struct stat *buf) { errno = ENOSYS; return -1; }
+int _stat(const char *fname, struct stat *buf) {
+  if (fname == NULL || buf == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  int fd = _open(fname, 0, 0);
+  if (fd < 0) {
+    return -1;
+  }
+
+  int ret = _fstat(fd, buf);
+  _close(fd);
+  return ret;
+}
 int _kill(int pid, int sig) { errno = ENOSYS; return -1; }
 pid_t _getpid() { return 1; }
 pid_t _fork() { errno = ENOSYS; return -1; }
