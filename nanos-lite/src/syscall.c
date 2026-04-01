@@ -75,7 +75,10 @@ void do_syscall(Context *c) {
       c->GPRx = 0;
       break;
     }
-
+    case 22:  // isatty(fd)
+    c->GPRx = (a[1] == 0 || a[1] == 1 || a[1] == 2) ? 1 : 0;
+    break;
+    
     case SYS_time:
     case SYS_signal:
     case SYS_times:
