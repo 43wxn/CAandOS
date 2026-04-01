@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include <errno.h>
 #include "syscall.h"
+#include <reent.h>
+#include <sys/types.h>
+
 
 #define _concat(x, y) x ## y
 #define concat(x, y) _concat(x, y)
@@ -88,8 +91,12 @@ int _close(int fd) {
 }
 
 off_t _lseek(int fd, off_t offset, int whence) {
-  off_t ret = (off_t)_syscall_(SYS_lseek, fd, offset, whence);
-  return ret;
+  intptr_t ret = _syscall_(SYS_lseek, fd, (intptr_t)offset, whence);
+  if (ret < 0) {
+    errno = EINVAL;
+    return (off_t)-1;
+  }
+  return (off_t)ret;
 }
 
 void *_sbrk(intptr_t increment) {
@@ -155,3 +162,4 @@ unsigned int sleep(unsigned int seconds) { errno = ENOSYS; return 0; }
 ssize_t readlink(const char *pathname, char *buf, size_t bufsiz) { errno = ENOSYS; return -1; }
 int symlink(const char *target, const char *linkpath) { errno = ENOSYS; return -1; }
 int ioctl(int fd, unsigned long request, ...) { errno = ENOSYS; return -1; }
+
