@@ -15,25 +15,27 @@ typedef struct {
 
 void do_syscall(Context *c) {
   Log("RAW syscall: GPR1=%u GPR2=%u GPR3=%u GPR4=%u mepc=%p",
-    c->GPR1, c->GPR2, c->GPR3, c->GPR4, (void *)c->mepc);
+      (unsigned)c->GPR1, (unsigned)c->GPR2, (unsigned)c->GPR3, (unsigned)c->GPR4, (void *)c->mepc);
+
   uintptr_t a[4];
-  a[0] = c->GPR1;
-  a[1] = c->GPR2;
-  a[2] = c->GPR3;
-  a[3] = c->GPR4;
+  a[0] = c->GPR1;  // a7: syscall no
+  a[1] = c->GPR2;  // a0: arg0 / return value
+  a[2] = c->GPR3;  // a1
+  a[3] = c->GPR4;  // a2
+
   Log("DECODE syscall: no=%u arg1=%u arg2=%p arg3=%u",
       (unsigned)a[0], (unsigned)a[1], (void *)a[2], (unsigned)a[3]);
+
   switch (a[0]) {
     case SYS_exit:
       Log("SYS_exit(status=%d)", (int)a[1]);
       halt(a[1]);
-      Log("SYSCALL return: no=%u ret=%d", (unsigned)a[0], (int)c->GPRx);
       break;
 
     case SYS_yield:
       c->GPRx = 0;
-      yield();
       Log("SYSCALL return: no=%u ret=%d", (unsigned)a[0], (int)c->GPRx);
+      yield();
       break;
 
     case SYS_open:
@@ -84,14 +86,11 @@ void do_syscall(Context *c) {
         tz->tz_minuteswest = 0;
         tz->tz_dsttime = 0;
       }
+
       c->GPRx = 0;
       Log("SYSCALL return: no=%u ret=%d", (unsigned)a[0], (int)c->GPRx);
       break;
     }
-    case 22:  // isatty(fd)
-    c->GPRx = (a[1] == 0 || a[1] == 1 || a[1] == 2) ? 1 : 0;
-    Log("SYSCALL return: no=%u ret=%d", (unsigned)a[0], (int)c->GPRx);
-    break;
 
     case SYS_time:
     case SYS_signal:
@@ -104,11 +103,12 @@ void do_syscall(Context *c) {
     case SYS_unlink:
     case SYS_wait:
       c->GPRx = -1;
+      Log("SYSCALL return: no=%u ret=%d", (unsigned)a[0], (int)c->GPRx);
       break;
 
     default:
       Log("UNKNOWN syscall: no=%u arg1=%u arg2=%p arg3=%u mepc=%p",
-      (unsigned)a[0], (unsigned)a[1], (void *)a[2], (unsigned)a[3], (void *)c->mepc);
+          (unsigned)a[0], (unsigned)a[1], (void *)a[2], (unsigned)a[3], (void *)c->mepc);
       panic("Unhandled syscall ID = %d", (int)a[0]);
   }
 }
