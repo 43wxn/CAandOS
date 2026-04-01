@@ -75,10 +75,11 @@ int _open(const char *path, int flags, mode_t mode) {
     return -1;
   }
   intptr_t ret = _syscall_(SYS_open, (intptr_t)path, flags, mode);
-  if (ret < 0) {
-    errno = ENOENT;
-    return -1;
-  }
+  // 系统调用返回值直接返回，不要在这里设置 errno
+  // 因为负值可能是有效的文件描述符？实际上文件描述符不应该为负
+  // 但根据日志，open 返回了 3，这是正常的，所以不要在这里判断 ret < 0
+  // 只有在真正的错误时才返回 -1，但 nanos-lite 的 syscall.c 中 open 成功返回非负值
+  // 失败返回 -1，所以这里直接返回 ret
   return (int)ret;
 }
 
@@ -88,10 +89,8 @@ ssize_t _read(int fd, void *buf, size_t count) {
     return -1;
   }
   intptr_t ret = _syscall_(SYS_read, fd, (intptr_t)buf, count);
-  if (ret < 0) {
-    errno = EINVAL;
-    return -1;
-  }
+  // read 返回实际读取的字节数，可能为 0，失败时返回 -1
+  // 直接返回 ret 即可
   return (ssize_t)ret;
 }
 
@@ -101,28 +100,16 @@ ssize_t _write(int fd, const void *buf, size_t count) {
     return -1;
   }
   intptr_t ret = _syscall_(SYS_write, fd, (intptr_t)buf, count);
-  if (ret < 0) {
-    errno = EINVAL;
-    return -1;
-  }
   return (ssize_t)ret;
 }
 
 int _close(int fd) {
   intptr_t ret = _syscall_(SYS_close, fd, 0, 0);
-  if (ret < 0) {
-    errno = EINVAL;
-    return -1;
-  }
   return (int)ret;
 }
 
 off_t _lseek(int fd, off_t offset, int whence) {
   intptr_t ret = _syscall_(SYS_lseek, fd, (intptr_t)offset, whence);
-  if (ret < 0) {
-    errno = EINVAL;
-    return (off_t)-1;
-  }
   return (off_t)ret;
 }
 
@@ -151,19 +138,11 @@ int _fstat(int fd, struct stat *buf) {
     return -1;
   }
   intptr_t ret = _syscall_(SYS_fstat, fd, (intptr_t)buf, 0);
-  if (ret < 0) {
-    errno = EINVAL;
-    return -1;
-  }
   return (int)ret;
 }
 
 int _gettimeofday(struct timeval *tv, struct timezone *tz) {
   intptr_t ret = _syscall_(SYS_gettimeofday, (intptr_t)tv, (intptr_t)tz, 0);
-  if (ret < 0) {
-    errno = EINVAL;
-    return -1;
-  }
   return (int)ret;
 }
 
@@ -199,4 +178,3 @@ unsigned int sleep(unsigned int seconds) { errno = ENOSYS; return 0; }
 ssize_t readlink(const char *pathname, char *buf, size_t bufsiz) { errno = ENOSYS; return -1; }
 int symlink(const char *target, const char *linkpath) { errno = ENOSYS; return -1; }
 int ioctl(int fd, unsigned long request, ...) { errno = ENOSYS; return -1; }
-
