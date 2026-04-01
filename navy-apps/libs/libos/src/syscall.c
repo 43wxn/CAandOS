@@ -102,10 +102,7 @@ int _fstat(int fd, struct stat *buf) {
 
   memset(buf, 0, sizeof(*buf));
 
-  if (fd == 0 || fd == 1 || fd == 2) {
-    buf->st_mode = S_IFCHR;
-    buf->st_size = 0;
-  } else if (fd == 3 || fd == 4 || fd == 5) {
+  if (fd >= 0 && fd <= 5) {
     buf->st_mode = S_IFCHR;
     buf->st_size = 0;
   } else {
