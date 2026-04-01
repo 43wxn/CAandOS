@@ -22,13 +22,16 @@ typedef struct {
   size_t open_offset;
 } Finfo;
 
-enum { FD_STDIN, FD_STDOUT, FD_STDERR, FD_EVENTS, FD_DISPINFO, FD_FB };
+enum {
+  FD_STDIN, FD_STDOUT, FD_STDERR,
+  FD_EVENTS, FD_DISPINFO, FD_FB
+};
 
 static size_t invalid_read(void *buf, size_t offset, size_t len) {
-  panic("invalid_read from fd"); return 0;
+  panic("invalid_read"); return 0;
 }
 static size_t invalid_write(const void *buf, size_t offset, size_t len) {
-  panic("invalid_write to fd"); return 0;
+  panic("invalid_write"); return 0;
 }
 
 static Finfo file_table[] __attribute__((used)) = {
@@ -45,69 +48,76 @@ static Finfo file_table[] __attribute__((used)) = {
 
 void init_fs() {
   AM_GPU_CONFIG_T cfg = io_read(AM_GPU_CONFIG);
-  file_table[FD_FB].size = cfg.width * cfg.height * sizeof(uint32_t);
+  file_table[FD_FB].size = cfg.width * cfg.height * 4;
 }
 
-int fs_open(const char *pathname, int flags, int mode) {
+int fs_open(const char *path, int flags, int mode) {
   for (int i = 0; i < NR_FILES; i++) {
-    if (strcmp(pathname, file_table[i].name) == 0) {
+    if (!strcmp(path, file_table[i].name)) {
       file_table[i].open_offset = 0;
       return i;
     }
   }
-  panic("File not found: %s", pathname);
   return -1;
 }
 
 size_t fs_read(int fd, void *buf, size_t len) {
   Finfo *f = &file_table[fd];
-  if (f->read) {
-    size_t n = f->read(buf, f->open_offset, len);
-    f->open_offset += n;
-    return n;
+  if (f->read && f->read != invalid_read) {
+    size_t ret = f->read(buf, f->open_offset, len);
+    f->open_offset += ret;
+    return ret;
   }
-  size_t remain = f->size - f->open_offset;
-  size_t real_len = (len < remain) ? len : remain;
-  ramdisk_read(buf, f->disk_offset + f->open_offset, real_len);
-  f->open_offset += real_len;
-  return real_len;
+  if (f->open_offset >= f->size) return 0;
+  size_t r = len < f->size - f->open_offset ? len : f->size - f->open_offset;
+  ramdisk_read(buf, f->disk_offset + f->open_offset, r);
+  f->open_offset += r;
+  return r;
 }
 
 size_t fs_write(int fd, const void *buf, size_t len) {
   Finfo *f = &file_table[fd];
-  if (f->write) {
-    size_t n = f->write(buf, f->open_offset, len);
-    f->open_offset += n;
-    return n;
+  size_t ret = 0;
+  if (f->write && f->write != invalid_write) {
+    ret = f->write(buf, f->open_offset, len);
+  } else {
+    if (f->open_offset >= f->size) return 0;
+    size_t w = len;
+    if (f->open_offset + w > f->size) w = f->size - f->open_offset;
+    ramdisk_write(buf, f->disk_offset + f->open_offset, w);
+    ret = w;
   }
-  size_t remain = f->size - f->open_offset;
-  size_t real_len = (len < remain) ? len : remain;
-  ramdisk_write(buf, f->disk_offset + f->open_offset, real_len);
-  f->open_offset += real_len;
-  return real_len;
+  f->open_offset += ret;
+  return ret;
 }
 
 off_t fs_lseek(int fd, off_t offset, int whence) {
   Finfo *f = &file_table[fd];
-  if (fd < 6) return 0; // 特殊设备不支持偏移改变
-
-  off_t new_off = f->open_offset;
-  switch (whence) {
-    case SEEK_SET: new_off = offset; break;
-    case SEEK_CUR: new_off += offset; break;
-    case SEEK_END: new_off = f->size + offset; break;
+  if (fd <= FD_FB) return -1;
+  off_t noff = 0;
+  switch(whence) {
+    case SEEK_SET: noff = offset; break;
+    case SEEK_CUR: noff = f->open_offset + offset; break;
+    case SEEK_END: noff = f->size + offset; break;
     default: return -1;
   }
-  if (new_off < 0 || new_off > f->size) return -1;
-  f->open_offset = new_off;
-  return new_off;
+  if (noff < 0 || (size_t)noff > f->size) return -1;
+  f->open_offset = noff;
+  return noff;
 }
 
 int fs_close(int fd) { return 0; }
 
-int fs_fstat(int fd, struct stat *buf) {
-  if (fd < 0 || fd >= NR_FILES) return -1;
-  buf->st_size = file_table[fd].size;
-  buf->st_mode = (fd < 6) ? S_IFCHR : S_IFREG;
+int fs_fstat(int fd, struct stat *st) {
+  memset(st, 0, sizeof(*st));
+  if (fd <= FD_FB) {
+    st->st_mode = S_IFCHR | 0666;
+    st->st_size = 0;
+  } else {
+    st->st_mode = S_IFREG | 0644;
+    st->st_size = file_table[fd].size;
+  }
+  st->st_nlink = 1;
+  st->st_blksize = 4096;
   return 0;
 }

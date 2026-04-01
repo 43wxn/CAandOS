@@ -24,9 +24,20 @@ void hello_fun(void *arg) {
 void init_proc() {
   switch_boot_pcb();
   Log("Initializing processes...");
-  naive_uload(NULL, "/bin/file-test");   // 或 /bin/file-test
+  // 加载用户程序
+  naive_uload(NULL, "/bin/timer-test");
 }
 
+// 修复：实现最简单的轮询调度
 Context* schedule(Context *prev) {
-  return prev;
+  // 保存当前进程上下文
+  current->cp = prev;
+
+  // 轮询选择下一个就绪进程
+  static int next_pcb = 0;
+  next_pcb = (next_pcb + 1) % MAX_NR_PROC;
+
+  // 切换到下一个进程
+  current = &pcb[next_pcb];
+  return current->cp;
 }
