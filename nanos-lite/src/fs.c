@@ -71,7 +71,6 @@ int fs_open(const char *pathname, int flags, int mode) {
   Log("fs_open: file not found = %s", pathname);
   return -1;
 }
-
 size_t fs_read(int fd, void *buf, size_t len) {
   assert(fd >= 0 && fd < NR_FILES);
   Finfo *f = &file_table[fd];
@@ -123,17 +122,10 @@ off_t fs_lseek(int fd, off_t offset, int whence) {
 
   off_t new_offset = 0;
   switch (whence) {
-    case SEEK_SET:
-      new_offset = offset;
-      break;
-    case SEEK_CUR:
-      new_offset = (off_t)f->open_offset + offset;
-      break;
-    case SEEK_END:
-      new_offset = (off_t)f->size + offset;
-      break;
-    default:
-      return -1;
+    case SEEK_SET: new_offset = offset; break;
+    case SEEK_CUR: new_offset = (off_t)f->open_offset + offset; break;
+    case SEEK_END: new_offset = (off_t)f->size + offset; break;
+    default: return -1;
   }
 
   if (new_offset < 0 || new_offset > (off_t)f->size) {
@@ -143,11 +135,11 @@ off_t fs_lseek(int fd, off_t offset, int whence) {
   f->open_offset = (size_t)new_offset;
   return new_offset;
 }
-
 int fs_close(int fd) {
   assert(fd >= 0 && fd < NR_FILES);
   return 0;
 }
+
 
 int fs_fstat(int fd, struct stat *buf) {
   assert(fd >= 0 && fd < NR_FILES);

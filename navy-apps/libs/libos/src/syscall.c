@@ -4,9 +4,6 @@
 #include <stdint.h>
 #include <errno.h>
 #include "syscall.h"
-#include <reent.h>
-#include <sys/types.h>
-
 
 #define _concat(x, y) x ## y
 #define concat(x, y) _concat(x, y)
@@ -35,25 +32,33 @@
 # error unsupported ISA
 #endif
 
+
+__attribute__((noinline))
 intptr_t _syscall_(intptr_t type, intptr_t a0, intptr_t a1, intptr_t a2) {
 #if defined(__riscv)
-  register intptr_t _a0 asm("a0") = a0;
-  register intptr_t _a1 asm("a1") = a1;
-  register intptr_t _a2 asm("a2") = a2;
+  register intptr_t x10 asm("a0") = a0;
+  register intptr_t x11 asm("a1") = a1;
+  register intptr_t x12 asm("a2") = a2;
 # ifdef __riscv_e
-  register intptr_t _sysnum asm("a5") = type;
+  register intptr_t x15 asm("a5") = type;
 # else
-  register intptr_t _sysnum asm("a7") = type;
+  register intptr_t x17 asm("a7") = type;
 # endif
 
   asm volatile (
     "ecall"
-    : "+r"(_a0)
-    : "r"(_sysnum), "r"(_a1), "r"(_a2)
-    : "memory"
+    : "+r"(x10)
+# ifdef __riscv_e
+    : "r"(x11), "r"(x12), "r"(x15)
+# else
+    : "r"(x11), "r"(x12), "r"(x17)
+# endif
+    : "memory",
+      "a3", "a4", "a5", "a6",
+      "t0", "t1", "t2", "t3", "t4", "t5", "t6"
   );
 
-  return _a0;
+  return x10;
 #else
 # error unsupported ISA
 #endif
@@ -69,12 +74,12 @@ int _open(const char *path, int flags, mode_t mode) {
     errno = EINVAL;
     return -1;
   }
-  int ret = (int)_syscall_(SYS_open, (intptr_t)path, flags, mode);
+  intptr_t ret = _syscall_(SYS_open, (intptr_t)path, flags, mode);
   if (ret < 0) {
     errno = ENOENT;
     return -1;
   }
-  return ret;
+  return (int)ret;
 }
 
 ssize_t _read(int fd, void *buf, size_t count) {
@@ -82,9 +87,12 @@ ssize_t _read(int fd, void *buf, size_t count) {
     errno = EINVAL;
     return -1;
   }
-  ssize_t ret = (ssize_t)_syscall_(SYS_read, fd, (intptr_t)buf, count);
-  printf("DEBUG _read ret = %d\n", (int)ret);
-  return ret;
+  intptr_t ret = _syscall_(SYS_read, fd, (intptr_t)buf, count);
+  if (ret < 0) {
+    errno = EINVAL;
+    return -1;
+  }
+  return (ssize_t)ret;
 }
 
 ssize_t _write(int fd, const void *buf, size_t count) {
@@ -92,11 +100,21 @@ ssize_t _write(int fd, const void *buf, size_t count) {
     errno = EINVAL;
     return -1;
   }
-  return (ssize_t)_syscall_(SYS_write, fd, (intptr_t)buf, count);
+  intptr_t ret = _syscall_(SYS_write, fd, (intptr_t)buf, count);
+  if (ret < 0) {
+    errno = EINVAL;
+    return -1;
+  }
+  return (ssize_t)ret;
 }
 
 int _close(int fd) {
-  return (int)_syscall_(SYS_close, fd, 0, 0);
+  intptr_t ret = _syscall_(SYS_close, fd, 0, 0);
+  if (ret < 0) {
+    errno = EINVAL;
+    return -1;
+  }
+  return (int)ret;
 }
 
 off_t _lseek(int fd, off_t offset, int whence) {
@@ -132,15 +150,23 @@ int _fstat(int fd, struct stat *buf) {
     errno = EINVAL;
     return -1;
   }
-  return (int)_syscall_(SYS_fstat, fd, (intptr_t)buf, 0);
+  intptr_t ret = _syscall_(SYS_fstat, fd, (intptr_t)buf, 0);
+  if (ret < 0) {
+    errno = EINVAL;
+    return -1;
+  }
+  return (int)ret;
 }
 
 int _gettimeofday(struct timeval *tv, struct timezone *tz) {
-  return (int)_syscall_(SYS_gettimeofday, (intptr_t)tv, (intptr_t)tz, 0);
+  intptr_t ret = _syscall_(SYS_gettimeofday, (intptr_t)tv, (intptr_t)tz, 0);
+  if (ret < 0) {
+    errno = EINVAL;
+    return -1;
+  }
+  return (int)ret;
 }
 
-/* 以下这些先保持占位 */
-int _execve(const char *fname, char * const argv[], char *const envp[]) { errno = ENOSYS; return -1; }
 int _stat(const char *fname, struct stat *buf) {
   if (fname == NULL || buf == NULL) {
     errno = EINVAL;
@@ -148,14 +174,16 @@ int _stat(const char *fname, struct stat *buf) {
   }
 
   int fd = _open(fname, 0, 0);
-  if (fd < 0) {
-    return -1;
-  }
+  if (fd < 0) return -1;
 
   int ret = _fstat(fd, buf);
   _close(fd);
   return ret;
 }
+
+/* 以下这些先保持占位 */
+int _execve(const char *fname, char * const argv[], char *const envp[]) { errno = ENOSYS; return -1; }
+
 int _kill(int pid, int sig) { errno = ENOSYS; return -1; }
 pid_t _getpid() { return 1; }
 pid_t _fork() { errno = ENOSYS; return -1; }
