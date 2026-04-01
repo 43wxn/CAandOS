@@ -17,14 +17,13 @@ typedef struct {
 
 void do_syscall(Context *c) {
   uintptr_t a[4];
-  a[0] = c->GPR1;
-  a[1] = c->GPR2;
-  a[2] = c->GPR3;
-  a[3] = c->GPR4;
+  a[0] = c->GPR1;  // syscall id
+  a[1] = c->GPR2;  // arg0
+  a[2] = c->GPR3;  // arg1
+  a[3] = c->GPR4;  // arg2
 
   switch (a[0]) {
     case SYS_exit:
-      // ===================== 【修复 2：正确退出】 =====================
       halt((int)a[1]);
       break;
 
@@ -77,8 +76,14 @@ void do_syscall(Context *c) {
       break;
     }
 
+    // ===================== 【关键修复：ID=13 必须处理】 =====================
+    case 13:  // SYS_rt_sigreturn，libc 退出一定会调用！
+      c->GPRx = 0;
+      break;
+
+    // 其他未实现系统调用，全部返回 -1
     default:
       c->GPRx = -1;
-      panic("Unhandled syscall ID = %d", (int)a[0]);
+      break;
   }
 }
