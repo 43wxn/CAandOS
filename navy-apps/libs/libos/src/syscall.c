@@ -1,10 +1,6 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/time.h>
-#include <assert.h>
-#include <time.h>
-#include <string.h>
-#include <stdint.h>
 #include <errno.h>
 #include "syscall.h"
 
@@ -14,13 +10,7 @@ static intptr_t do_syscall(intptr_t type, intptr_t arg0, intptr_t arg1, intptr_t
   register intptr_t a1 asm("a1") = arg1;
   register intptr_t a2 asm("a2") = arg2;
   register intptr_t a7 asm("a7") = type;
-
-  asm volatile (
-    "ecall"
-    : "+r"(a0)
-    : "r"(a1), "r"(a2), "r"(a7)
-    : "memory", "t0", "t1", "t2", "t3", "t4", "t5", "t6"
-  );
+  asm volatile ("ecall" : "+r"(a0) : "r"(a1), "r"(a2), "r"(a7) : "memory");
   return a0;
 }
 
@@ -28,71 +18,52 @@ intptr_t _syscall_(intptr_t type, intptr_t a0, intptr_t a1, intptr_t a2) {
   return do_syscall(type, a0, a1, a2);
 }
 
-// ===================== 【无汇编、零错误、最终版 _exit】 =====================
 void _exit(int status) {
-  // 纯C调用，不写任何汇编，绝对不报错
   _syscall_(SYS_exit, status, 0, 0);
   while(1);
 }
 
 int _open(const char *path, int flags, mode_t mode) {
-  if (path == NULL) { errno = EINVAL; return -1; }
-  return (int)_syscall_(SYS_open, (intptr_t)path, flags, mode);
+  return _syscall_(SYS_open, (intptr_t)path, flags, mode);
 }
 
 ssize_t _read(int fd, void *buf, size_t count) {
-  if (buf == NULL && count != 0) { errno = EINVAL; return -1; }
-  return (ssize_t)_syscall_(SYS_read, fd, (intptr_t)buf, count);
+  return _syscall_(SYS_read, fd, (intptr_t)buf, count);
 }
 
 ssize_t _write(int fd, const void *buf, size_t count) {
-  if (buf == NULL && count != 0) { errno = EINVAL; return -1; }
-  return (ssize_t)_syscall_(SYS_write, fd, (intptr_t)buf, count);
+  return _syscall_(SYS_write, fd, (intptr_t)buf, count);
 }
 
 int _close(int fd) {
-  return (int)_syscall_(SYS_close, fd, 0, 0);
+  return _syscall_(SYS_close, fd, 0, 0);
 }
 
 off_t _lseek(int fd, off_t offset, int whence) {
-  return (off_t)_syscall_(SYS_lseek, fd, offset, whence);
+  return _syscall_(SYS_lseek, fd, offset, whence);
 }
 
 void *_sbrk(intptr_t increment) {
   extern char _end;
-  static uintptr_t cur_brk = 0;
-  if (cur_brk == 0) cur_brk = ((uintptr_t)&_end + 7) & ~7UL;
-  uintptr_t old_brk = cur_brk;
-  uintptr_t new_brk = cur_brk + increment;
-  intptr_t ret = _syscall_(SYS_brk, new_brk, 0, 0);
-  if (ret == 0) { cur_brk = new_brk; return (void *)old_brk; }
-  errno = ENOMEM; return (void *)-1;
+  static uintptr_t brk;
+  if (brk == 0) brk = (uintptr_t)&_end;
+  brk += increment;
+  return (void*)(brk - increment);
 }
 
 int _fstat(int fd, struct stat *buf) {
-  if (buf == NULL) { errno = EINVAL; return -1; }
-  return (int)_syscall_(SYS_fstat, fd, (intptr_t)buf, 0);
+  return _syscall_(SYS_fstat, fd, (intptr_t)buf, 0);
 }
 
 int _gettimeofday(struct timeval *tv, struct timezone *tz) {
-  return (int)_syscall_(SYS_gettimeofday, (intptr_t)tv, (intptr_t)tz, 0);
+  return _syscall_(SYS_gettimeofday, (intptr_t)tv, (intptr_t)tz, 0);
 }
 
-// 未实现系统调用
-int _execve(const char *fname, char * const argv[], char *const envp[]) { errno=ENOSYS;return-1; }
-int _stat(const char *fname, struct stat *buf) { errno=ENOSYS;return-1; }
-int _kill(int pid, int sig) { errno=ENOSYS;return-1; }
+int _execve(const char *fname, char *const argv[], char *const envp[]) { return -1; }
+int _stat(const char *fname, struct stat *buf) { return -1; }
+int _kill(int pid, int sig) { return -1; }
 pid_t _getpid() { return 1; }
-pid_t _fork() { errno=ENOSYS;return-1; }
-pid_t vfork() { errno=ENOSYS;return-1; }
-int _link(const char *d, const char *n) { errno=ENOSYS;return-1; }
-int _unlink(const char *n) { errno=ENOSYS;return-1; }
-pid_t _wait(int *status) { errno=ENOSYS;return-1; }
-clock_t _times(void *buf) { errno=ENOSYS;return(clock_t)-1; }
-int pipe(int pipefd[2]) { errno=ENOSYS;return-1; }
-int dup(int oldfd) { errno=ENOSYS;return-1; }
-int dup2(int oldfd, int newfd) { errno=ENOSYS;return-1; }
-unsigned int sleep(unsigned int seconds) { return 0; }
-ssize_t readlink(const char *pathname, char *buf, size_t bufsiz) { errno=ENOSYS;return-1; }
-int symlink(const char *target, const char *linkpath) { errno=ENOSYS;return-1; }
-int ioctl(int fd, unsigned long request, ...) { errno=ENOSYS;return-1; }
+pid_t _fork() { return -1; }
+int _link(const char *d, const char *n) { return -1; }
+int _unlink(const char *n) { return -1; }
+pid_t _wait(int *status) { return -1; }

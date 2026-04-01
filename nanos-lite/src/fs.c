@@ -49,7 +49,7 @@ void init_fs() {
 
 int fs_open(const char *pathname, int flags, int mode) {
   for (int i = 0; i < NR_FILES; i++) {
-    if (strcmp(pathname, file_table[i].name) == 0) {
+    if (!strcmp(pathname, file_table[i].name)) {
       file_table[i].open_offset = 0;
       return i;
     }
@@ -58,7 +58,7 @@ int fs_open(const char *pathname, int flags, int mode) {
 }
 
 size_t fs_read(int fd, void *buf, size_t len) {
-  if (fd < 0 || fd >= NR_FILES) return 0;
+  if (fd <0 || fd >= NR_FILES) return 0;
   Finfo *f = &file_table[fd];
   size_t ret = f->read(buf, f->open_offset, len);
   f->open_offset += ret;
@@ -66,37 +66,32 @@ size_t fs_read(int fd, void *buf, size_t len) {
 }
 
 size_t fs_write(int fd, const void *buf, size_t len) {
-  if (fd < 0 || fd >= NR_FILES) return 0;
+  if (fd <0 || fd >= NR_FILES) return 0;
   Finfo *f = &file_table[fd];
   size_t ret = f->write(buf, f->open_offset, len);
   f->open_offset += ret;
   return ret;
 }
 
-// 修复：删除无用变量，无警告编译
 size_t fs_lseek(int fd, off_t offset, int whence) {
-  if (fd < 0 || fd >= NR_FILES) return -1;
+  if (fd <0 || fd >= NR_FILES) return -1;
   Finfo *f = &file_table[fd];
-  off_t new_off;
-
-  switch (whence) {
-    case SEEK_SET: new_off = offset; break;
-    case SEEK_CUR: new_off = f->open_offset + offset; break;
-    case SEEK_END: new_off = f->size + offset; break;
+  off_t no;
+  switch(whence){
+    case SEEK_SET: no = offset; break;
+    case SEEK_CUR: no = f->open_offset + offset; break;
+    case SEEK_END: no = f->size + offset; break;
     default: return -1;
   }
-
-  if (new_off < 0 || (size_t)new_off > f->size) return -1;
-  f->open_offset = new_off;
-  return new_off;
+  if(no <0 || (size_t)no > f->size) return -1;
+  f->open_offset = no;
+  return no;
 }
 
-int fs_close(int fd) {
-  return (fd >= 0 && fd < NR_FILES) ? 0 : -1;
-}
+int fs_close(int fd) { return 0; }
 
 int fs_fstat(int fd, struct stat *buf) {
-  if (fd < 0 || fd >= NR_FILES || !buf) return -1;
+  if (fd <0 || fd >= NR_FILES || !buf) return -1;
   Finfo *f = &file_table[fd];
   buf->st_size = f->size;
   buf->st_mode = S_IFREG;
