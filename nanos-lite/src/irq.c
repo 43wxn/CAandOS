@@ -13,8 +13,6 @@ static Context *do_event(Event e, Context *c) {
 
     case EVENT_SYSCALL:
       do_syscall(c);
-      // 注意：这里不要再 c->mepc += 4
-      // 因为 cte.c 里已经对 ecall 做过一次 mepc += 4 了
       return c;
 
     case EVENT_IRQ_TIMER:

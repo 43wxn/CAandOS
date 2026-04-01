@@ -64,19 +64,12 @@ void init_fs() {
 int fs_open(const char *pathname, int flags, int mode) {
   (void)flags;
   (void)mode;
-
-  Log("fs_open(pathname=%s, flags=%d, mode=%d)", pathname, flags, mode);
-
   for (int i = 0; i < NR_FILES; i++) {
     if (strcmp(pathname, file_table[i].name) == 0) {
       file_table[i].open_offset = 0;
-      Log("fs_open matched fd=%d name=%s size=%d disk_offset=%d",
-          i, file_table[i].name, (int)file_table[i].size, (int)file_table[i].disk_offset);
       return i;
     }
   }
-
-  panic("fs_open: file not found: %s", pathname);
   return -1;
 }
 
