@@ -8,56 +8,6 @@
 #include <errno.h>
 #include "syscall.h"
 
-// helper macros
-#define _concat(x, y) x ## y
-#define concat(x, y) _concat(x, y)
-#define _args(n, list) concat(_arg, n) list
-#define _arg0(a0, ...) a0
-#define _arg1(a0, a1, ...) a1
-#define _arg2(a0, a1, a2, ...) a2
-#define _arg3(a0, a1, a2, a3, ...) a3
-#define _arg4(a0, a1, a2, a3, a4, ...) a4
-#define _arg5(a0, a1, a2, a3, a4, a5, ...) a5
-
-// extract an argument from the macro array
-#define SYSCALL  _args(0, ARGS_ARRAY)
-#define GPR1 _args(1, ARGS_ARRAY)
-#define GPR2 _args(2, ARGS_ARRAY)
-#define GPR3 _args(3, ARGS_ARRAY)
-#define GPR4 _args(4, ARGS_ARRAY)
-#define GPRx _args(5, ARGS_ARRAY)
-
-// ISA-dependent definitions
-#if defined(__ISA_X86__)
-# define ARGS_ARRAY ("int $0x80", "eax", "ebx", "ecx", "edx", "eax")
-#elif defined(__ISA_MIPS32__)
-# define ARGS_ARRAY ("syscall", "v0", "a0", "a1", "a2", "v0")
-#elif defined(__riscv)
-#ifdef __riscv_e
-# define ARGS_ARRAY ("ecall", "a5", "a0", "a1", "a2", "a0")
-#else
-# define ARGS_ARRAY ("ecall", "a7", "a0", "a1", "a2", "a0")
-#endif
-#elif defined(__ISA_AM_NATIVE__)
-# define ARGS_ARRAY ("call *0x100000", "rdi", "rsi", "rdx", "rcx", "rax")
-#elif defined(__ISA_X86_64__)
-# define ARGS_ARRAY ("int $0x80", "rdi", "rsi", "rdx", "rcx", "rax")
-#elif defined(__ISA_LOONGARCH32R__)
-# define ARGS_ARRAY ("syscall 0", "a7", "a0", "a1", "a2", "a0")
-#else
-#error _syscall_ is not implemented
-#endif
-
-#include <unistd.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <assert.h>
-#include <time.h>
-#include <string.h>
-#include <stdint.h>
-#include <errno.h>
-#include "syscall.h"
-
 __attribute__((noinline))
 static intptr_t do_syscall(intptr_t type, intptr_t arg0, intptr_t arg1, intptr_t arg2) {
   register intptr_t a0 asm("a0") = arg0;
@@ -148,10 +98,7 @@ int _fstat(int fd, struct stat *buf) {
 }
 
 int _gettimeofday(struct timeval *tv, struct timezone *tz) {
-  (void)tv;
-  (void)tz;
-  errno = ENOSYS;
-  return -1;
+  return (int)_syscall_(SYS_gettimeofday, (intptr_t)tv, (intptr_t)tz, 0);
 }
 
 int _execve(const char *fname, char * const argv[], char *const envp[]) {
@@ -161,9 +108,6 @@ int _execve(const char *fname, char * const argv[], char *const envp[]) {
   errno = ENOSYS;
   return -1;
 }
-
-// Syscalls below are not used in Nanos-lite.
-// But to pass linking, they are defined as dummy functions.
 
 int _stat(const char *fname, struct stat *buf) {
   (void)fname;

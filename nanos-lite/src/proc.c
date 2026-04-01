@@ -24,20 +24,15 @@ void hello_fun(void *arg) {
 void init_proc() {
   switch_boot_pcb();
   Log("Initializing processes...");
-  // 加载用户程序
-  naive_uload(NULL, "/bin/event-test");
+  // 这里每次只加载一个测试程序
+  // naive_uload(NULL, "/bin/file-test");
+  // naive_uload(NULL, "/bin/dmp-test");
+  // naive_uload(NULL, "/bin/event-test");
+  naive_uload(NULL, "/bin/timer-test");
 }
 
-// 修复：实现最简单的轮询调度
+// PA3 单程序模型：直接返回当前上下文
 Context* schedule(Context *prev) {
-  // 保存当前进程上下文
   current->cp = prev;
-
-  // 轮询选择下一个就绪进程
-  static int next_pcb = 0;
-  next_pcb = (next_pcb + 1) % MAX_NR_PROC;
-
-  // 切换到下一个进程
-  current = &pcb[next_pcb];
-  return current->cp;
+  return prev;
 }

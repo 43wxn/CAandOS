@@ -2,6 +2,8 @@
 #include <common.h>
 #include <sys/stat.h>
 #include <string.h>
+#include <am.h>
+
 typedef size_t (*ReadFn) (void *buf, size_t offset, size_t len);
 typedef size_t (*WriteFn) (const void *buf, size_t offset, size_t len);
 
@@ -53,11 +55,15 @@ static Finfo file_table[] __attribute__((used)) = {
 #define NR_FILES (int)(sizeof(file_table) / sizeof(file_table[0]))
 
 void init_fs() {
-  // PA3 file-test 暂时不需要特殊处理 /dev/fb
+  AM_GPU_CONFIG_T cfg = io_read(AM_GPU_CONFIG);
+  file_table[FD_FB].size = cfg.width * cfg.height * sizeof(uint32_t);
 }
 
 int fs_open(const char *pathname, int flags, int mode) {
+  (void)flags;
+  (void)mode;
   Log("fs_open(pathname=%s, flags=%d, mode=%d)", pathname, flags, mode);
+
   for (int i = 0; i < NR_FILES; i++) {
     if (strcmp(pathname, file_table[i].name) == 0) {
       file_table[i].open_offset = 0;
@@ -66,6 +72,7 @@ int fs_open(const char *pathname, int flags, int mode) {
       return i;
     }
   }
+
   panic("fs_open: file not found = %s", pathname);
   return -1;
 }
@@ -73,6 +80,7 @@ int fs_open(const char *pathname, int flags, int mode) {
 size_t fs_read(int fd, void *buf, size_t len) {
   assert(fd >= 0 && fd < NR_FILES);
   Finfo *f = &file_table[fd];
+
   Log("fs_read(fd=%d, len=%d, open_offset=%d, size=%d)",
       fd, (int)len, (int)f->open_offset, (int)f->size);
 
@@ -84,14 +92,14 @@ size_t fs_read(int fd, void *buf, size_t len) {
   }
 
   if (f->open_offset >= f->size) {
-    Log("fs_read EOF");
     return 0;
   }
 
   size_t remain = f->size - f->open_offset;
-  size_t real_len = len < remain ? len : remain;
+  size_t real_len = (len < remain ? len : remain);
   ramdisk_read(buf, f->disk_offset + f->open_offset, real_len);
   f->open_offset += real_len;
+
   Log("fs_read normal -> %d, new_offset=%d", (int)real_len, (int)f->open_offset);
   return real_len;
 }
@@ -100,20 +108,27 @@ size_t fs_write(int fd, const void *buf, size_t len) {
   assert(fd >= 0 && fd < NR_FILES);
   Finfo *f = &file_table[fd];
 
+  Log("fs_write(fd=%d, len=%d, open_offset=%d, size=%d)",
+      fd, (int)len, (int)f->open_offset, (int)f->size);
+
   size_t ret = 0;
+
   if (f->write != NULL && f->write != invalid_write) {
     ret = f->write(buf, f->open_offset, len);
-  } else {
-    if (f->open_offset >= f->size) return 0;
-    if (f->open_offset + len > f->size) {
-      len = f->size - f->open_offset;
-    }
-    ramdisk_write(buf, f->disk_offset + f->open_offset, len);
-    ret = len;
+    f->open_offset += ret;
+    return ret;
   }
 
-  f->open_offset += ret;
-  return ret;
+  if (f->open_offset >= f->size) {
+    return 0;
+  }
+
+  size_t remain = f->size - f->open_offset;
+  size_t real_len = (len < remain ? len : remain);
+  ramdisk_write(buf, f->disk_offset + f->open_offset, real_len);
+  f->open_offset += real_len;
+
+  return real_len;
 }
 
 size_t fs_lseek(int fd, off_t offset, int whence) {
@@ -123,7 +138,7 @@ size_t fs_lseek(int fd, off_t offset, int whence) {
   Log("fs_lseek(fd=%d, offset=%d, whence=%d, old=%d, size=%d)",
       fd, (int)offset, whence, (int)f->open_offset, (int)f->size);
 
-  off_t new_offset = 0;
+  off_t new_offset;
   switch (whence) {
     case SEEK_SET: new_offset = offset; break;
     case SEEK_CUR: new_offset = (off_t)f->open_offset + offset; break;
@@ -131,11 +146,14 @@ size_t fs_lseek(int fd, off_t offset, int whence) {
     default: panic("fs_lseek: invalid whence = %d", whence);
   }
 
-  assert(new_offset >= 0 && (size_t)new_offset <= f->size);
+  assert(new_offset >= 0);
+  assert((size_t)new_offset <= f->size);
+
   f->open_offset = (size_t)new_offset;
   Log("fs_lseek -> %d", (int)f->open_offset);
   return f->open_offset;
 }
+
 int fs_close(int fd) {
   assert(fd >= 0 && fd < NR_FILES);
   return 0;

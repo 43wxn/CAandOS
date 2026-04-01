@@ -16,6 +16,13 @@ static Context *do_event(Event e, Context *c) {
       c->mepc += 4;   // RISC-V: 跳过 ecall
       return c;
 
+    case EVENT_IRQ_TIMER:
+#ifdef TIME_SHARING
+      return schedule(c);
+#else
+      return c;
+#endif
+
     default:
       panic("Unhandled event ID = %d", e.event);
   }
