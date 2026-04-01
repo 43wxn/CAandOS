@@ -1,17 +1,9 @@
 #include <common.h>
 #include <am.h>
 #include <fs.h>
+#include <sys/stat.h>
+#include <sys/time.h>
 #include "syscall.h"
-
-typedef struct {
-  uint32_t tv_sec;
-  uint32_t tv_usec;
-} kl_timeval_t;
-
-typedef struct {
-  int32_t tz_minuteswest;
-  int32_t tz_dsttime;
-} kl_timezone_t;
 
 void do_syscall(Context *c) {
   uintptr_t a[4];
@@ -52,8 +44,7 @@ void do_syscall(Context *c) {
       break;
 
     case SYS_fstat:
-      // 这一版先不让内核直接写用户 struct stat，避免 ABI/布局问题
-      c->GPRx = 0;
+      c->GPRx = fs_fstat((int)a[1], (struct stat *)a[2]);
       break;
 
     case SYS_brk:
@@ -61,12 +52,12 @@ void do_syscall(Context *c) {
       break;
 
     case SYS_gettimeofday: {
-      kl_timeval_t *tv = (kl_timeval_t *)a[1];
-      kl_timezone_t *tz = (kl_timezone_t *)a[2];
+      struct timeval *tv = (struct timeval *)a[1];
+      struct timezone *tz = (struct timezone *)a[2];
       AM_TIMER_UPTIME_T uptime = io_read(AM_TIMER_UPTIME);
 
       if (tv != NULL) {
-        tv->tv_sec  = uptime.us / 1000000;
+        tv->tv_sec = uptime.us / 1000000;
         tv->tv_usec = uptime.us % 1000000;
       }
       if (tz != NULL) {

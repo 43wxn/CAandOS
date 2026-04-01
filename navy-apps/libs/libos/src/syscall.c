@@ -8,11 +8,6 @@
 #include <errno.h>
 #include "syscall.h"
 
-typedef struct {
-  int32_t tv_sec;
-  int32_t tv_usec;
-} kl_timeval_t;
-
 __attribute__((noinline))
 static intptr_t do_syscall(intptr_t type, intptr_t arg0, intptr_t arg1, intptr_t arg2) {
   register intptr_t a0 asm("a0") = arg0;
@@ -99,38 +94,11 @@ int _fstat(int fd, struct stat *buf) {
     errno = EINVAL;
     return -1;
   }
-
-  memset(buf, 0, sizeof(*buf));
-
-  if (fd >= 0 && fd <= 2) {
-    buf->st_mode = S_IFCHR;
-  } else if (fd >= 3 && fd <= 5) {
-    buf->st_mode = S_IFCHR;
-  } else {
-    buf->st_mode = S_IFREG;
-  }
-
-  buf->st_blksize = 4096;
-  buf->st_size = 0;
-  return 0;
+  return (int)_syscall_(SYS_fstat, fd, (intptr_t)buf, 0);
 }
 
 int _gettimeofday(struct timeval *tv, struct timezone *tz) {
-  kl_timeval_t ktv;
-  intptr_t ret = _syscall_(SYS_gettimeofday, tv ? (intptr_t)&ktv : 0, 0, 0);
-  if (ret < 0) {
-    return -1;
-  }
-
-  if (tv != NULL) {
-    tv->tv_sec = ktv.tv_sec;
-    tv->tv_usec = ktv.tv_usec;
-  }
-  if (tz != NULL) {
-    tz->tz_minuteswest = 0;
-    tz->tz_dsttime = 0;
-  }
-  return 0;
+  return (int)_syscall_(SYS_gettimeofday, (intptr_t)tv, (intptr_t)tz, 0);
 }
 
 int _execve(const char *fname, char * const argv[], char *const envp[]) {

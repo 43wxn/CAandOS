@@ -157,6 +157,8 @@ int fs_fstat(int fd, struct stat *buf) {
   assert(fd >= 0 && fd < NR_FILES);
   assert(buf != NULL);
 
+  memset(buf, 0, sizeof(*buf));
+
   if (fd == FD_STDIN || fd == FD_STDOUT || fd == FD_STDERR ||
       fd == FD_EVENTS || fd == FD_DISPINFO || fd == FD_FB) {
     buf->st_mode = S_IFCHR;
@@ -166,5 +168,6 @@ int fs_fstat(int fd, struct stat *buf) {
     buf->st_size = file_table[fd].size;
   }
 
+  buf->st_blksize = 4096;
   return 0;
 }
