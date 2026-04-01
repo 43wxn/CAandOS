@@ -157,12 +157,14 @@ int fs_fstat(int fd, struct stat *buf) {
 
   if (fd == FD_STDIN || fd == FD_STDOUT || fd == FD_STDERR ||
       fd == FD_EVENTS || fd == FD_DISPINFO || fd == FD_FB) {
-    buf->st_mode = S_IFCHR;
+    buf->st_mode = S_IFCHR | 0666;
+    buf->st_size = 0;
   } else {
-    buf->st_mode = S_IFREG;
+    buf->st_mode = S_IFREG | 0644;
     buf->st_size = file_table[fd].size;
   }
 
   buf->st_blksize = 4096;
+  buf->st_nlink = 1;
   return 0;
 }
