@@ -15,13 +15,7 @@ void switch_boot_pcb() {
 void init_proc() {
   switch_boot_pcb();
   Log("Initializing processes...");
-
-  // 每次只保留一个测试程序
-  // naive_uload(NULL, "/bin/hello");
-  // naive_uload(NULL, "/bin/file-test");
-  // naive_uload(NULL, "/bin/timer-test");
-  // naive_uload(NULL, "/bin/event-test");
-  naive_uload(NULL, "/bin/file-test");
+  naive_uload(NULL, "/bin/hello");
 }
 
 Context* schedule(Context *prev) {

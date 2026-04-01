@@ -24,13 +24,27 @@ typedef struct {
 } Finfo;
 
 enum {
-  FD_STDIN, FD_STDOUT, FD_STDERR, FD_EVENTS, FD_DISPINFO, FD_FB
+  FD_STDIN,
+  FD_STDOUT,
+  FD_STDERR,
+  FD_EVENTS,
+  FD_DISPINFO,
+  FD_FB
 };
 
-static size_t invalid_read(void *buf, size_t offset, size_t len) { return 0; }
-static size_t invalid_write(const void *buf, size_t offset, size_t len) { return 0; }
+static size_t invalid_read(void *buf, size_t offset, size_t len) {
+  (void)buf; (void)offset; (void)len;
+  panic("invalid_read");
+  return 0;
+}
 
-static Finfo file_table[] = {
+static size_t invalid_write(const void *buf, size_t offset, size_t len) {
+  (void)buf; (void)offset; (void)len;
+  panic("invalid_write");
+  return 0;
+}
+
+static Finfo file_table[] __attribute__((used)) = {
   [FD_STDIN]    = {"stdin",          0, 0, invalid_read,  invalid_write, 0},
   [FD_STDOUT]   = {"stdout",         0, 0, invalid_read,  serial_write,  0},
   [FD_STDERR]   = {"stderr",         0, 0, invalid_read,  serial_write,  0},
@@ -40,16 +54,18 @@ static Finfo file_table[] = {
 #include "files.h"
 };
 
-#define NR_FILES (sizeof(file_table) / sizeof(file_table[0]))
+#define NR_FILES (int)(sizeof(file_table) / sizeof(file_table[0]))
 
 void init_fs() {
   AM_GPU_CONFIG_T cfg = io_read(AM_GPU_CONFIG);
-  file_table[FD_FB].size = cfg.width * cfg.height * 4;
+  file_table[FD_FB].size = cfg.width * cfg.height * sizeof(uint32_t);
 }
 
 int fs_open(const char *pathname, int flags, int mode) {
+  (void)flags;
+  (void)mode;
   for (int i = 0; i < NR_FILES; i++) {
-    if (!strcmp(pathname, file_table[i].name)) {
+    if (strcmp(pathname, file_table[i].name) == 0) {
       file_table[i].open_offset = 0;
       return i;
     }
@@ -58,42 +74,97 @@ int fs_open(const char *pathname, int flags, int mode) {
 }
 
 size_t fs_read(int fd, void *buf, size_t len) {
-  if (fd <0 || fd >= NR_FILES) return 0;
+  assert(fd >= 0 && fd < NR_FILES);
   Finfo *f = &file_table[fd];
-  size_t ret = f->read(buf, f->open_offset, len);
-  f->open_offset += ret;
-  return ret;
+
+  if (fd == FD_EVENTS) {
+    return events_read(buf, 0, len);
+  }
+
+  if (f->read != NULL && f->read != invalid_read) {
+    size_t ret = f->read(buf, f->open_offset, len);
+    f->open_offset += ret;
+    return ret;
+  }
+
+  if (f->open_offset >= f->size) {
+    return 0;
+  }
+
+  size_t real_len = len;
+  if (f->open_offset + real_len > f->size) {
+    real_len = f->size - f->open_offset;
+  }
+
+  ramdisk_read(buf, f->disk_offset + f->open_offset, real_len);
+  f->open_offset += real_len;
+  return real_len;
 }
 
 size_t fs_write(int fd, const void *buf, size_t len) {
-  if (fd <0 || fd >= NR_FILES) return 0;
+  assert(fd >= 0 && fd < NR_FILES);
   Finfo *f = &file_table[fd];
-  size_t ret = f->write(buf, f->open_offset, len);
-  f->open_offset += ret;
-  return ret;
+
+  if ((fd == FD_STDOUT || fd == FD_STDERR) &&
+      f->write != NULL && f->write != invalid_write) {
+    return f->write(buf, 0, len);
+  }
+
+  if (f->write != NULL && f->write != invalid_write) {
+    size_t ret = f->write(buf, f->open_offset, len);
+    f->open_offset += ret;
+    return ret;
+  }
+
+  if (f->open_offset >= f->size) {
+    return 0;
+  }
+
+  size_t real_len = len;
+  if (f->open_offset + real_len > f->size) {
+    real_len = f->size - f->open_offset;
+  }
+
+  ramdisk_write(buf, f->disk_offset + f->open_offset, real_len);
+  f->open_offset += real_len;
+  return real_len;
 }
 
 size_t fs_lseek(int fd, off_t offset, int whence) {
-  if (fd <0 || fd >= NR_FILES) return -1;
+  assert(fd >= 0 && fd < NR_FILES);
   Finfo *f = &file_table[fd];
-  off_t no;
-  switch(whence){
-    case SEEK_SET: no = offset; break;
-    case SEEK_CUR: no = f->open_offset + offset; break;
-    case SEEK_END: no = f->size + offset; break;
-    default: return -1;
+
+  off_t new_offset = 0;
+  switch (whence) {
+    case SEEK_SET: new_offset = offset; break;
+    case SEEK_CUR: new_offset = (off_t)f->open_offset + offset; break;
+    case SEEK_END: new_offset = (off_t)f->size + offset; break;
+    default: panic("fs_lseek: invalid whence = %d", whence);
   }
-  if(no <0 || (size_t)no > f->size) return -1;
-  f->open_offset = no;
-  return no;
+
+  assert(new_offset >= 0);
+  assert((size_t)new_offset <= f->size);
+  f->open_offset = (size_t)new_offset;
+  return f->open_offset;
 }
 
-int fs_close(int fd) { return 0; }
+int fs_close(int fd) {
+  assert(fd >= 0 && fd < NR_FILES);
+  return 0;
+}
 
 int fs_fstat(int fd, struct stat *buf) {
-  if (fd <0 || fd >= NR_FILES || !buf) return -1;
-  Finfo *f = &file_table[fd];
-  buf->st_size = f->size;
-  buf->st_mode = S_IFREG;
+  assert(fd >= 0 && fd < NR_FILES);
+  assert(buf != NULL);
+
+  if (fd == FD_STDIN || fd == FD_STDOUT || fd == FD_STDERR ||
+      fd == FD_EVENTS || fd == FD_DISPINFO || fd == FD_FB) {
+    buf->st_mode = S_IFCHR;
+    buf->st_size = 0;
+  } else {
+    buf->st_mode = S_IFREG;
+    buf->st_size = file_table[fd].size;
+  }
+
   return 0;
 }

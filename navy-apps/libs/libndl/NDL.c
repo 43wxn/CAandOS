@@ -39,6 +39,7 @@ void NDL_OpenCanvas(int *w, int *h) {
   }
 
   lseek(dispdev, 0, SEEK_SET);
+
   char buf[128] = {};
   int n = read(dispdev, buf, sizeof(buf) - 1);
   assert(n > 0);
@@ -71,14 +72,17 @@ void NDL_DrawRect(uint32_t *pixels, int x, int y, int w, int h) {
 }
 
 void NDL_OpenAudio(int freq, int channels, int samples) {
-  (void)freq; (void)channels; (void)samples;
+  (void)freq;
+  (void)channels;
+  (void)samples;
 }
 
 void NDL_CloseAudio() {
 }
 
 int NDL_PlayAudio(void *buf, int len) {
-  (void)buf; (void)len;
+  (void)buf;
+  (void)len;
   return 0;
 }
 
