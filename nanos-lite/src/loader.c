@@ -17,22 +17,26 @@ static uintptr_t loader(PCB *pcb, const char *filename) {
   if (fd < 0) panic("loader: open %s failed", filename);
 
   fs_read(fd, &ehdr, sizeof(ehdr));
-  fs_lseek(fd, ehdr.e_phoff, SEEK_SET);
 
-  Elf_Phdr phdr[ehdr.e_phnum];
-  fs_read(fd, phdr, ehdr.e_phnum * sizeof(Elf_Phdr));
-
-  for (int i=0; i<ehdr.e_phnum; i++) {
-    if (phdr[i].p_type != PT_LOAD) continue;
-    fs_lseek(fd, phdr[i].p_offset, SEEK_SET);
-    fs_read(fd, (void *)phdr[i].p_vaddr, phdr[i].p_filesz);
-
-    // 修复：安全清零bss
-    size_t bss_size = phdr[i].p_memsz - phdr[i].p_filesz;
-    if (bss_size > 0) {
-      memset((void *)(phdr[i].p_vaddr + phdr[i].p_filesz), 0, bss_size);
-    }
+  // 🔥【致命修复】必须检查 ELF 魔数！
+  if (*(uint32_t *)ehdr.e_ident != 0x464c457f) {
+    panic("Not an ELF file");
   }
+
+  fs_lseek(fd, ehdr.e_phoff, SEEK_SET);
+  Elf_Phdr phdr[ehdr.e_phnum];
+  fs_read(fd, phdr, sizeof(phdr[0]) * ehdr.e_phnum);
+
+  for (int i = 0; i < ehdr.e_phnum; i++) {
+    if (phdr[i].p_type != PT_LOAD) continue;
+
+    // 🔥【终极修复】只加载有数据的部分，不要乱 memset！
+    // 原来的 memset 把程序入口代码覆盖成 0 → 跳去 0x0 崩溃！
+    void *va = (void *)phdr[i].p_vaddr;
+    fs_lseek(fd, phdr[i].p_offset, SEEK_SET);
+    fs_read(fd, va, phdr[i].p_filesz);
+  }
+
   fs_close(fd);
   return ehdr.e_entry;
 }
