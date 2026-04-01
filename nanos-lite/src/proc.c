@@ -25,7 +25,7 @@ void init_proc() {
   switch_boot_pcb();
   Log("Initializing processes...");
   // 加载用户程序
-  naive_uload(NULL, "/bin/file-test");
+  naive_uload(NULL, "/bin/timer-test");
 }
 
 // 修复：实现最简单的轮询调度
