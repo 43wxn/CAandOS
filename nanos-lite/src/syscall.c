@@ -67,6 +67,7 @@ void do_syscall(Context *c) {
       break;
 
     case SYS_gettimeofday: {
+      Log("SYS_gettimeofday(tv=%p, tz=%p)", (void *)a[1], (void *)a[2]);
       struct timeval *tv = (struct timeval *)a[1];
       struct timezone *tz = (struct timezone *)a[2];
       AM_TIMER_UPTIME_T uptime = io_read(AM_TIMER_UPTIME);
@@ -82,6 +83,21 @@ void do_syscall(Context *c) {
       c->GPRx = 0;
       break;
     }
+
+    // 这些在 PA3 里通常不用真做，先给 ENOSYS 风格返回
+    case SYS_kill:
+    case SYS_getpid:
+    case SYS_time:
+    case SYS_signal:
+    case SYS_execve:
+    case SYS_fork:
+    case SYS_link:
+    case SYS_unlink:
+    case SYS_wait:
+    case SYS_times:
+      Log("SYS_%d not implemented", (int)a[0]);
+      c->GPRx = -1;
+      break;
 
     default:
       panic("Unhandled syscall ID = %d", (int)a[0]);

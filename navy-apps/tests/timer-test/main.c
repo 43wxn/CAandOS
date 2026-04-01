@@ -2,6 +2,7 @@
 #include <NDL.h>
 
 int main() {
+  printf(">>> file-test main entered <<<\n");
   NDL_Init(0);
 
   uint32_t last = NDL_GetTicks();
