@@ -8,6 +8,11 @@
 #include <errno.h>
 #include "syscall.h"
 
+typedef struct {
+  int32_t tv_sec;
+  int32_t tv_usec;
+} user_timeval_t;
+
 __attribute__((noinline))
 static intptr_t do_syscall(intptr_t type, intptr_t arg0, intptr_t arg1, intptr_t arg2) {
   register intptr_t a0 asm("a0") = arg0;
@@ -94,11 +99,37 @@ int _fstat(int fd, struct stat *buf) {
     errno = EINVAL;
     return -1;
   }
-  return (int)_syscall_(SYS_fstat, fd, (intptr_t)buf, 0);
+
+  memset(buf, 0, sizeof(*buf));
+
+  if (fd == 0 || fd == 1 || fd == 2) {
+    buf->st_mode = S_IFCHR;
+    buf->st_size = 0;
+  } else if (fd == 3 || fd == 4 || fd == 5) {
+    buf->st_mode = S_IFCHR;
+    buf->st_size = 0;
+  } else {
+    buf->st_mode = S_IFREG;
+    buf->st_size = 0;
+  }
+
+  return 0;
 }
 
 int _gettimeofday(struct timeval *tv, struct timezone *tz) {
-  return (int)_syscall_(SYS_gettimeofday, (intptr_t)tv, (intptr_t)tz, 0);
+  user_timeval_t utv;
+  int ret = (int)_syscall_(SYS_gettimeofday, (intptr_t)&utv, 0, 0);
+  if (ret < 0) return ret;
+
+  if (tv != NULL) {
+    tv->tv_sec = utv.tv_sec;
+    tv->tv_usec = utv.tv_usec;
+  }
+  if (tz != NULL) {
+    tz->tz_minuteswest = 0;
+    tz->tz_dsttime = 0;
+  }
+  return 0;
 }
 
 int _execve(const char *fname, char * const argv[], char *const envp[]) {
@@ -119,9 +150,7 @@ int _kill(int pid, int sig) {
   return -1;
 }
 
-pid_t _getpid() {
-  return 1;
-}
+pid_t _getpid() { return 1; }
 
 pid_t _fork() {
   errno = ENOSYS;
