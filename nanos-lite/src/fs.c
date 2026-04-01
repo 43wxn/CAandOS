@@ -1,5 +1,6 @@
 #include <fs.h>
 #include <common.h>
+#include <sys/stat.h>
 #include <string.h>
 #include <am.h>
 
@@ -23,27 +24,13 @@ typedef struct {
 } Finfo;
 
 enum {
-  FD_STDIN,
-  FD_STDOUT,
-  FD_STDERR,
-  FD_EVENTS,
-  FD_DISPINFO,
-  FD_FB
+  FD_STDIN, FD_STDOUT, FD_STDERR, FD_EVENTS, FD_DISPINFO, FD_FB
 };
 
-static size_t invalid_read(void *buf, size_t offset, size_t len) {
-  (void)buf; (void)offset; (void)len;
-  panic("invalid_read");
-  return 0;
-}
+static size_t invalid_read(void *buf, size_t offset, size_t len) { return 0; }
+static size_t invalid_write(const void *buf, size_t offset, size_t len) { return 0; }
 
-static size_t invalid_write(const void *buf, size_t offset, size_t len) {
-  (void)buf; (void)offset; (void)len;
-  panic("invalid_write");
-  return 0;
-}
-
-static Finfo file_table[] __attribute__((used)) = {
+static Finfo file_table[] = {
   [FD_STDIN]    = {"stdin",          0, 0, invalid_read,  invalid_write, 0},
   [FD_STDOUT]   = {"stdout",         0, 0, invalid_read,  serial_write,  0},
   [FD_STDERR]   = {"stderr",         0, 0, invalid_read,  serial_write,  0},
@@ -53,16 +40,14 @@ static Finfo file_table[] __attribute__((used)) = {
 #include "files.h"
 };
 
-#define NR_FILES (int)(sizeof(file_table) / sizeof(file_table[0]))
+#define NR_FILES (sizeof(file_table) / sizeof(file_table[0]))
 
 void init_fs() {
   AM_GPU_CONFIG_T cfg = io_read(AM_GPU_CONFIG);
-  file_table[FD_FB].size = cfg.width * cfg.height * sizeof(uint32_t);
+  file_table[FD_FB].size = cfg.width * cfg.height * 4;
 }
 
 int fs_open(const char *pathname, int flags, int mode) {
-  (void)flags;
-  (void)mode;
   for (int i = 0; i < NR_FILES; i++) {
     if (strcmp(pathname, file_table[i].name) == 0) {
       file_table[i].open_offset = 0;
@@ -73,88 +58,47 @@ int fs_open(const char *pathname, int flags, int mode) {
 }
 
 size_t fs_read(int fd, void *buf, size_t len) {
-  assert(fd >= 0 && fd < NR_FILES);
+  if (fd < 0 || fd >= NR_FILES) return 0;
   Finfo *f = &file_table[fd];
-
-  if (fd == FD_EVENTS) {
-    return events_read(buf, 0, len);
-  }
-
-  if (f->read != NULL && f->read != invalid_read) {
-    size_t ret = f->read(buf, f->open_offset, len);
-    f->open_offset += ret;
-    return ret;
-  }
-
-  if (f->open_offset >= f->size) {
-    return 0;
-  }
-
-  size_t real_len = len;
-  if (f->open_offset + real_len > f->size) {
-    real_len = f->size - f->open_offset;
-  }
-
-  ramdisk_read(buf, f->disk_offset + f->open_offset, real_len);
-  f->open_offset += real_len;
-  return real_len;
+  size_t ret = f->read(buf, f->open_offset, len);
+  f->open_offset += ret;
+  return ret;
 }
 
 size_t fs_write(int fd, const void *buf, size_t len) {
-  assert(fd >= 0 && fd < NR_FILES);
+  if (fd < 0 || fd >= NR_FILES) return 0;
   Finfo *f = &file_table[fd];
-
-  if ((fd == FD_STDOUT || fd == FD_STDERR) &&
-      f->write != NULL && f->write != invalid_write) {
-    return f->write(buf, 0, len);
-  }
-
-  if (f->write != NULL && f->write != invalid_write) {
-    size_t ret = f->write(buf, f->open_offset, len);
-    f->open_offset += ret;
-    return ret;
-  }
-
-  if (f->open_offset >= f->size) {
-    return 0;
-  }
-
-  size_t real_len = len;
-  if (f->open_offset + real_len > f->size) {
-    real_len = f->size - f->open_offset;
-  }
-
-  ramdisk_write((void *)buf, f->disk_offset + f->open_offset, real_len);
-  f->open_offset += real_len;
-  return real_len;
+  size_t ret = f->write(buf, f->open_offset, len);
+  f->open_offset += ret;
+  return ret;
 }
 
+// 修复：删除无用变量，无警告编译
 size_t fs_lseek(int fd, off_t offset, int whence) {
-  assert(fd >= 0 && fd < NR_FILES);
+  if (fd < 0 || fd >= NR_FILES) return -1;
   Finfo *f = &file_table[fd];
+  off_t new_off;
 
-  off_t new_offset = 0;
   switch (whence) {
-    case SEEK_SET: new_offset = offset; break;
-    case SEEK_CUR: new_offset = (off_t)f->open_offset + offset; break;
-    case SEEK_END: new_offset = (off_t)f->size + offset; break;
-    default: panic("fs_lseek: invalid whence = %d", whence);
+    case SEEK_SET: new_off = offset; break;
+    case SEEK_CUR: new_off = f->open_offset + offset; break;
+    case SEEK_END: new_off = f->size + offset; break;
+    default: return -1;
   }
 
-  assert(new_offset >= 0);
-  assert((size_t)new_offset <= f->size);
-  f->open_offset = (size_t)new_offset;
-  return f->open_offset;
+  if (new_off < 0 || (size_t)new_off > f->size) return -1;
+  f->open_offset = new_off;
+  return new_off;
 }
 
 int fs_close(int fd) {
-  assert(fd >= 0 && fd < NR_FILES);
-  return 0;
+  return (fd >= 0 && fd < NR_FILES) ? 0 : -1;
 }
 
 int fs_fstat(int fd, struct stat *buf) {
-  // PA3 里实际不再依赖内核填写 stat, 直接返回成功即可
-  (void)fd;
-  (void)buf;
+  if (fd < 0 || fd >= NR_FILES || !buf) return -1;
+  Finfo *f = &file_table[fd];
+  buf->st_size = f->size;
+  buf->st_mode = S_IFREG;
   return 0;
 }

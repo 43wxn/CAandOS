@@ -6,25 +6,16 @@
 
 void do_syscall(Context *c);
 
-static Context *do_event(Event e, Context *c) {
+static Context* do_event(Event e, Context* c) {
   switch (e.event) {
     case EVENT_YIELD:
       return schedule(c);
-      
     case EVENT_SYSCALL:
       do_syscall(c);
-      // ==============================================
-      // 🔥【致命修复】必须 +4，跳过当前 ecall 指令！
       c->mepc += 4;
-      // ==============================================
       return c;
-      
     case EVENT_IRQ_TIMER:
-#ifdef TIME_SHARING
-      return schedule(c);
-#else
       return c;
-#endif
     default:
       panic("Unhandled event ID = %d", e.event);
   }

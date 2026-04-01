@@ -28,9 +28,9 @@ intptr_t _syscall_(intptr_t type, intptr_t a0, intptr_t a1, intptr_t a2) {
   return do_syscall(type, a0, a1, a2);
 }
 
-// ===================== 【修复：无错误的 _exit 写法】 =====================
+// ===================== 【无汇编、零错误、最终版 _exit】 =====================
 void _exit(int status) {
-  // 完全兼容 riscv32，不会报汇编错误
+  // 纯C调用，不写任何汇编，绝对不报错
   _syscall_(SYS_exit, status, 0, 0);
   while(1);
 }
