@@ -26,7 +26,9 @@ static intptr_t do_syscall(intptr_t type, intptr_t arg0, intptr_t arg1, intptr_t
     "ecall"
     : "+r"(a0)
     : "r"(a1), "r"(a2), "r"(a7)
-    : "memory"
+    : "memory",
+      "a3", "a4", "a5", "a6",
+      "t0", "t1", "t2", "t3", "t4", "t5", "t6"
   );
 
   return a0;
