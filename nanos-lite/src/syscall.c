@@ -14,7 +14,7 @@ void do_syscall(Context *c) {
 
   switch (a[0]) {
     case SYS_exit:
-      Log("SYS_exit(status=%d)", a[1]);
+      Log("SYS_exit(status=%d)", (int)a[1]);
       halt(a[1]);
       break;
 
@@ -28,23 +28,23 @@ void do_syscall(Context *c) {
       break;
 
     case SYS_read:
-      c->GPRx = fs_read(a[1], (void *)a[2], a[3]);
+      c->GPRx = fs_read((int)a[1], (void *)a[2], (size_t)a[3]);
       break;
 
     case SYS_write:
-      c->GPRx = fs_write(a[1], (const void *)a[2], a[3]);
+      c->GPRx = fs_write((int)a[1], (const void *)a[2], (size_t)a[3]);
       break;
 
     case SYS_close:
-      c->GPRx = fs_close(a[1]);
+      c->GPRx = fs_close((int)a[1]);
       break;
 
     case SYS_lseek:
-      c->GPRx = fs_lseek(a[1], (off_t)a[2], a[3]);
+      c->GPRx = fs_lseek((int)a[1], (off_t)a[2], (int)a[3]);
       break;
 
     case SYS_fstat:
-      c->GPRx = fs_fstat(a[1], (struct stat *)a[2]);
+      c->GPRx = fs_fstat((int)a[1], (struct stat *)a[2]);
       break;
 
     case SYS_brk:
@@ -55,12 +55,11 @@ void do_syscall(Context *c) {
       struct timeval *tv = (struct timeval *)a[1];
       struct timezone *tz = (struct timezone *)a[2];
       AM_TIMER_UPTIME_T uptime = io_read(AM_TIMER_UPTIME);
-
-      if (tv) {
+      if (tv != NULL) {
         tv->tv_sec = uptime.us / 1000000;
         tv->tv_usec = uptime.us % 1000000;
       }
-      if (tz) {
+      if (tz != NULL) {
         tz->tz_minuteswest = 0;
         tz->tz_dsttime = 0;
       }
@@ -82,6 +81,6 @@ void do_syscall(Context *c) {
       break;
 
     default:
-      panic("Unhandled syscall ID = %d", a[0]);
+      panic("Unhandled syscall ID = %d", (int)a[0]);
   }
 }

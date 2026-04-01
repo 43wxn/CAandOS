@@ -73,7 +73,7 @@ void *_sbrk(intptr_t increment) {
   static uintptr_t cur_brk = 0;
 
   if (cur_brk == 0) {
-    cur_brk = (uintptr_t)&_end;
+    cur_brk = ((uintptr_t)&_end + 7) & ~((uintptr_t)7);
   }
 
   uintptr_t old_brk = cur_brk;

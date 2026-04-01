@@ -1,4 +1,5 @@
 #include <common.h>
+#include <am.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -24,6 +25,7 @@ size_t serial_write(const void *buf, size_t offset, size_t len) {
 }
 
 size_t events_read(void *buf, size_t offset, size_t len) {
+  (void)offset;
   if (len == 0) return 0;
 
   AM_INPUT_KEYBRD_T ev = io_read(AM_INPUT_KEYBRD);
@@ -34,10 +36,9 @@ size_t events_read(void *buf, size_t offset, size_t len) {
       ev.keydown ? "kd" : "ku",
       keyname[ev.keycode] ? keyname[ev.keycode] : "UNKNOWN");
 
-  if ((size_t)offset >= (size_t)n) return 0;
-  size_t real_len = (size_t)n - offset;
+  size_t real_len = (size_t)n;
   if (real_len > len) real_len = len;
-  memcpy(buf, tmp + offset, real_len);
+  memcpy(buf, tmp, real_len);
   return real_len;
 }
 
@@ -67,16 +68,18 @@ size_t fb_write(const void *buf, size_t offset, size_t len) {
   int y = pixel_off / w;
 
   while (pixel_cnt > 0 && y < h) {
-    int n = w - x;
-    if ((size_t)n > pixel_cnt) n = pixel_cnt;
+    int nr = w - x;
+    if ((size_t)nr > pixel_cnt) nr = (int)pixel_cnt;
 
-    io_write(AM_GPU_FBDRAW, x, y, (void *)pixels, n, 1, true);
+    io_write(AM_GPU_FBDRAW, x, y, (void *)pixels, nr, 1, false);
 
-    pixels += n;
-    pixel_cnt -= n;
+    pixels += nr;
+    pixel_cnt -= nr;
     x = 0;
     y++;
   }
+
+  io_write(AM_GPU_FBDRAW, 0, 0, NULL, 0, 0, true);
   return len;
 }
 

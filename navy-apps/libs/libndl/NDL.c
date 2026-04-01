@@ -24,6 +24,7 @@ uint32_t NDL_GetTicks() {
 int NDL_PollEvent(char *buf, int len) {
   if (evtdev < 0) return 0;
   int n = read(evtdev, buf, len);
+  if (n < 0) return 0;
   return n;
 }
 
@@ -37,6 +38,7 @@ void NDL_OpenCanvas(int *w, int *h) {
     assert(fbdev >= 0);
   }
 
+  lseek(dispdev, 0, SEEK_SET);
   char buf[128] = {};
   int n = read(dispdev, buf, sizeof(buf) - 1);
   assert(n > 0);
@@ -57,20 +59,6 @@ void NDL_OpenCanvas(int *w, int *h) {
 
   canvas_x = (screen_w - canvas_w) / 2;
   canvas_y = (screen_h - canvas_h) / 2;
-
-  if (getenv("NWM_APP")) {
-    int fbctl = 4;
-    char tmp[64];
-    int l = sprintf(tmp, "%d %d", canvas_w, canvas_h);
-    write(fbctl, tmp, l);
-    while (1) {
-      int nr = read(3, tmp, sizeof(tmp) - 1);
-      if (nr <= 0) continue;
-      tmp[nr] = '\0';
-      if (strcmp(tmp, "mmap ok") == 0) break;
-    }
-    close(fbctl);
-  }
 }
 
 void NDL_DrawRect(uint32_t *pixels, int x, int y, int w, int h) {
@@ -83,12 +71,14 @@ void NDL_DrawRect(uint32_t *pixels, int x, int y, int w, int h) {
 }
 
 void NDL_OpenAudio(int freq, int channels, int samples) {
+  (void)freq; (void)channels; (void)samples;
 }
 
 void NDL_CloseAudio() {
 }
 
 int NDL_PlayAudio(void *buf, int len) {
+  (void)buf; (void)len;
   return 0;
 }
 
@@ -99,8 +89,6 @@ int NDL_QueryAudio() {
 int NDL_Init(uint32_t flags) {
   (void)flags;
   evtdev = open("/dev/events", O_RDONLY, 0);
-  dispdev = open("/proc/dispinfo", O_RDONLY, 0);
-  fbdev = open("/dev/fb", O_WRONLY, 0);
   return 0;
 }
 
