@@ -163,11 +163,13 @@ int fs_fstat(int fd, struct stat *buf) {
   assert(fd >= 0 && fd < NR_FILES);
   assert(buf != NULL);
 
-  memset(buf, 0, sizeof(*buf));
+  // 不要 memset(buf, 0, sizeof(*buf));
+  // 很可能会因为内核/用户态 struct stat 大小不一致而把用户栈写坏
 
   if (fd == FD_STDIN || fd == FD_STDOUT || fd == FD_STDERR ||
       fd == FD_EVENTS || fd == FD_DISPINFO || fd == FD_FB) {
     buf->st_mode = S_IFCHR;
+    buf->st_size = 0;
   } else {
     buf->st_mode = S_IFREG;
     buf->st_size = file_table[fd].size;
