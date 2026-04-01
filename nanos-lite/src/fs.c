@@ -68,7 +68,7 @@ int fs_open(const char *pathname, int flags, int mode) {
       return i;
     }
   }
-  panic("fs_open: file not found = %s", pathname);
+  Log("fs_open: file not found = %s", pathname);
   return -1;
 }
 
@@ -112,40 +112,36 @@ size_t fs_write(int fd, const void *buf, size_t len) {
   return ret;
 }
 
-size_t fs_lseek(int fd, off_t offset, int whence) {
+off_t fs_lseek(int fd, off_t offset, int whence) {
   assert(fd >= 0 && fd < NR_FILES);
   Finfo *f = &file_table[fd];
-  
-  // 对于不支持 lseek 的设备（如 stdin/stdout/stderr, /dev/events, /proc/dispinfo, /dev/fb）
-  // 应该直接返回当前偏移或出错
-  if (fd == FD_STDIN || fd == FD_STDOUT || fd == FD_STDERR ||
-      fd == FD_EVENTS || fd == FD_DISPINFO || fd == FD_FB) {
-    // 这些设备不支持随机访问，但为了兼容性，返回0或当前偏移
-    // 根据测试程序，它会对普通文件调用 lseek，不会对这些设备调用
-    return f->open_offset;
+
+  if (fd == FD_EVENTS || fd == FD_DISPINFO || fd == FD_FB ||
+      fd == FD_STDIN || fd == FD_STDOUT || fd == FD_STDERR) {
+    return 0;
   }
-  
+
   off_t new_offset = 0;
   switch (whence) {
-    case SEEK_SET: 
-      new_offset = offset; 
+    case SEEK_SET:
+      new_offset = offset;
       break;
-    case SEEK_CUR: 
-      new_offset = (off_t)f->open_offset + offset; 
+    case SEEK_CUR:
+      new_offset = (off_t)f->open_offset + offset;
       break;
-    case SEEK_END: 
-      new_offset = (off_t)f->size + offset; 
+    case SEEK_END:
+      new_offset = (off_t)f->size + offset;
       break;
-    default: 
-      panic("fs_lseek: invalid whence = %d", whence);
+    default:
+      return -1;
   }
-  
-  if (new_offset < 0 || (size_t)new_offset > f->size) {
-    panic("fs_lseek: invalid offset = %ld", new_offset);
+
+  if (new_offset < 0 || new_offset > (off_t)f->size) {
+    return -1;
   }
-  
+
   f->open_offset = (size_t)new_offset;
-  return f->open_offset;
+  return new_offset;
 }
 
 int fs_close(int fd) {
