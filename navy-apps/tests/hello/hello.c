@@ -1,5 +1,4 @@
 #include <unistd.h>
-#include <stdio.h>
 
 int main() {
   write(1, "HELLO_MARKER_20260401\n", 22);
@@ -8,7 +7,7 @@ int main() {
   while (1) {
     j ++;
     if (j == 10000) {
-      printf("LOOP_MARKER_%d\n", i ++);
+      write(1, "LOOP\n", 5);
       j = 0;
     }
   }
