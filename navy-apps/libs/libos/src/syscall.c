@@ -17,19 +17,19 @@ typedef struct {
 } user_timeval_t;
 
 static intptr_t do_syscall(intptr_t type, intptr_t arg0, intptr_t arg1, intptr_t arg2) {
-  intptr_t ret;
+  register intptr_t a0 asm("a0") = arg0;
+  register intptr_t a1 asm("a1") = arg1;
+  register intptr_t a2 asm("a2") = arg2;
+  register intptr_t a7 asm("a7") = type;
+
   asm volatile (
-    "mv a7, %1\n"
-    "mv a0, %2\n"
-    "mv a1, %3\n"
-    "mv a2, %4\n"
-    "ecall\n"
-    "mv %0, a0\n"
-    : "=r"(ret)
-    : "r"(type), "r"(arg0), "r"(arg1), "r"(arg2)
-    : "a0", "a1", "a2", "a7", "memory"
+    "ecall"
+    : "+r"(a0)
+    : "r"(a1), "r"(a2), "r"(a7)
+    : "memory"
   );
-  return ret;
+
+  return a0;
 }
 
 intptr_t _syscall_(intptr_t type, intptr_t a0, intptr_t a1, intptr_t a2) {
