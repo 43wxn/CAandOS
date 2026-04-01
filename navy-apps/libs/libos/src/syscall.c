@@ -36,20 +36,27 @@
 #endif
 
 intptr_t _syscall_(intptr_t type, intptr_t a0, intptr_t a1, intptr_t a2) {
-  register intptr_t _gpr1 asm (GPR1) = type;
-  register intptr_t _gpr2 asm (GPR2) = a0;
-  register intptr_t _gpr3 asm (GPR3) = a1;
-  register intptr_t _gpr4 asm (GPR4) = a2;
-  register intptr_t ret   asm (GPRx);
+#if defined(__riscv)
+  register intptr_t _a0 asm("a0") = a0;
+  register intptr_t _a1 asm("a1") = a1;
+  register intptr_t _a2 asm("a2") = a2;
+# ifdef __riscv_e
+  register intptr_t _sysnum asm("a5") = type;
+# else
+  register intptr_t _sysnum asm("a7") = type;
+# endif
 
   asm volatile (
-    SYSCALL
-    : "=r"(ret)
-    : "r"(_gpr1), "r"(_gpr2), "r"(_gpr3), "r"(_gpr4)
+    "ecall"
+    : "+r"(_a0)
+    : "r"(_sysnum), "r"(_a1), "r"(_a2)
     : "memory"
   );
 
-  return ret;
+  return _a0;
+#else
+# error unsupported ISA
+#endif
 }
 
 void _exit(int status) {
