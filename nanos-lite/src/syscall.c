@@ -27,39 +27,48 @@ void do_syscall(Context *c) {
     case SYS_exit:
       Log("SYS_exit(status=%d)", (int)a[1]);
       halt(a[1]);
+      Log("SYSCALL return: no=%u ret=%d", (unsigned)a[0], (int)c->GPRx);
       break;
 
     case SYS_yield:
       c->GPRx = 0;
       yield();
+      Log("SYSCALL return: no=%u ret=%d", (unsigned)a[0], (int)c->GPRx);
       break;
 
     case SYS_open:
       c->GPRx = fs_open((const char *)a[1], (int)a[2], (int)a[3]);
+      Log("SYSCALL return: no=%u ret=%d", (unsigned)a[0], (int)c->GPRx);
       break;
 
     case SYS_read:
       c->GPRx = fs_read((int)a[1], (void *)a[2], (size_t)a[3]);
+      Log("SYSCALL return: no=%u ret=%d", (unsigned)a[0], (int)c->GPRx);
       break;
 
     case SYS_write:
       c->GPRx = fs_write((int)a[1], (const void *)a[2], (size_t)a[3]);
+      Log("SYSCALL return: no=%u ret=%d", (unsigned)a[0], (int)c->GPRx);
       break;
 
     case SYS_close:
       c->GPRx = fs_close((int)a[1]);
+      Log("SYSCALL return: no=%u ret=%d", (unsigned)a[0], (int)c->GPRx);
       break;
 
     case SYS_lseek:
       c->GPRx = fs_lseek((int)a[1], (off_t)a[2], (int)a[3]);
+      Log("SYSCALL return: no=%u ret=%d", (unsigned)a[0], (int)c->GPRx);
       break;
 
     case SYS_fstat:
       c->GPRx = fs_fstat((int)a[1], (void *)a[2]);
+      Log("SYSCALL return: no=%u ret=%d", (unsigned)a[0], (int)c->GPRx);
       break;
 
     case SYS_brk:
       c->GPRx = 0;
+      Log("SYSCALL return: no=%u ret=%d", (unsigned)a[0], (int)c->GPRx);
       break;
 
     case SYS_gettimeofday: {
@@ -76,10 +85,12 @@ void do_syscall(Context *c) {
         tz->tz_dsttime = 0;
       }
       c->GPRx = 0;
+      Log("SYSCALL return: no=%u ret=%d", (unsigned)a[0], (int)c->GPRx);
       break;
     }
     case 22:  // isatty(fd)
     c->GPRx = (a[1] == 0 || a[1] == 1 || a[1] == 2) ? 1 : 0;
+    Log("SYSCALL return: no=%u ret=%d", (unsigned)a[0], (int)c->GPRx);
     break;
 
     case SYS_time:
