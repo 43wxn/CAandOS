@@ -7,7 +7,10 @@
 #include <stdint.h>
 #include <errno.h>
 #include "syscall.h"
-
+_Static_assert(SYS_exit == 0, "bad SYS_exit");
+_Static_assert(SYS_write == 4, "bad SYS_write");
+_Static_assert(SYS_fstat == 10, "bad SYS_fstat");
+_Static_assert(SYS_gettimeofday == 19, "bad SYS_gettimeofday");
 typedef struct {
   int32_t tv_sec;
   int32_t tv_usec;
