@@ -6,6 +6,7 @@
 #include "syscall.h"
 
 static uintptr_t program_brk = 0;
+
 void do_syscall(Context *c) {
   uintptr_t a[4];
   a[0] = c->GPR1;
@@ -21,8 +22,8 @@ void do_syscall(Context *c) {
 
     case SYS_yield:
       Log("SYS_yield()");
-      c->GPRx = 0;
       yield();
+      c->GPRx = 0;
       break;
 
     case SYS_open:
@@ -62,28 +63,23 @@ void do_syscall(Context *c) {
       Log("SYS_fstat -> %d", c->GPRx);
       break;
 
-    case SYS_brk: {
-      uintptr_t new_brk = a[1];
+    case SYS_brk:
       if (program_brk == 0) {
         extern char _end;
         program_brk = (uintptr_t)&_end;
       }
-
-      if (new_brk >= program_brk) {
-        program_brk = new_brk;
-        c->GPRx = 0;
-      } else {
-        c->GPRx = -1;
+      if (a[1] > program_brk) {
+        program_brk = a[1];
       }
+      c->GPRx = 0;
       break;
-    }
 
     case SYS_gettimeofday: {
       struct timeval *tv = (struct timeval *)a[1];
-      AM_TIMER_UPTIME_T us = io_read(AM_TIMER_UPTIME);
+      AM_TIMER_UPTIME_T uptime = io_read(AM_TIMER_UPTIME);
       if (tv != NULL) {
-        tv->tv_sec = us.us / 1000000;
-        tv->tv_usec = us.us % 1000000;
+        tv->tv_sec  = uptime.us / 1000000;
+        tv->tv_usec = uptime.us % 1000000;
       }
       c->GPRx = 0;
       break;

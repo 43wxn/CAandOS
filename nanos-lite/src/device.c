@@ -1,5 +1,6 @@
 #include <common.h>
-#include <stdio.h>
+#include <am.h>
+#include <klib.h>
 #include <string.h>
 
 #if defined(MULTIPROGRAM) && !defined(TIME_SHARING)
@@ -16,6 +17,7 @@ static const char *keyname[256] __attribute__((used)) = {
 };
 
 size_t serial_write(const void *buf, size_t offset, size_t len) {
+  (void)offset;
   const char *p = (const char *)buf;
   for (size_t i = 0; i < len; i++) {
     putch(p[i]);
@@ -34,19 +36,23 @@ size_t events_read(void *buf, size_t offset, size_t len) {
 
   if (n < 0) return 0;
   if ((size_t)n > len) n = len;
-  return n;
+  return (size_t)n;
 }
 
 size_t dispinfo_read(void *buf, size_t offset, size_t len) {
-  (void)offset;  // 按要求忽略 offset
   AM_GPU_CONFIG_T cfg = io_read(AM_GPU_CONFIG);
 
   char info[64];
   int n = snprintf(info, sizeof(info), "WIDTH:%d\nHEIGHT:%d\n", cfg.width, cfg.height);
   if (n < 0) return 0;
 
-  size_t real_len = (size_t)n < len ? (size_t)n : len;
-  memcpy(buf, info, real_len);
+  size_t total = (size_t)n;
+  if (offset >= total) return 0;
+
+  size_t real_len = total - offset;
+  if (real_len > len) real_len = len;
+
+  memcpy(buf, info + offset, real_len);
   return real_len;
 }
 
@@ -56,9 +62,9 @@ size_t fb_write(const void *buf, size_t offset, size_t len) {
   int screen_h = cfg.height;
 
   const uint32_t *pixels = (const uint32_t *)buf;
-  size_t npixels = len / 4;
+  size_t npixels = len / sizeof(uint32_t);
 
-  size_t pixel_off = offset / 4;
+  size_t pixel_off = offset / sizeof(uint32_t);
   int x = pixel_off % screen_w;
   int y = pixel_off / screen_w;
 

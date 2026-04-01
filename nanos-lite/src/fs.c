@@ -1,10 +1,11 @@
 #include <fs.h>
 #include <common.h>
-#include <sys/stat.h>
+#include <am.h>
 #include <string.h>
+#include <sys/stat.h>
 
-typedef size_t (*ReadFn) (void *buf, size_t offset, size_t len);
-typedef size_t (*WriteFn) (const void *buf, size_t offset, size_t len);
+typedef size_t (*ReadFn)(void *buf, size_t offset, size_t len);
+typedef size_t (*WriteFn)(const void *buf, size_t offset, size_t len);
 
 size_t ramdisk_read(void *buf, size_t offset, size_t len);
 size_t ramdisk_write(const void *buf, size_t offset, size_t len);
@@ -28,7 +29,7 @@ enum {
   FD_STDERR,
   FD_EVENTS,
   FD_DISPINFO,
-  FD_FB
+  FD_FB,
 };
 
 static size_t invalid_read(void *buf, size_t offset, size_t len) {
@@ -71,6 +72,7 @@ int fs_open(const char *pathname, int flags, int mode) {
   Log("fs_open: file not found = %s", pathname);
   return -1;
 }
+
 size_t fs_read(int fd, void *buf, size_t len) {
   assert(fd >= 0 && fd < NR_FILES);
   Finfo *f = &file_table[fd];
@@ -100,9 +102,10 @@ size_t fs_write(int fd, const void *buf, size_t len) {
     ret = f->write(buf, f->open_offset, len);
   } else {
     if (f->open_offset >= f->size) return 0;
-    if (f->open_offset + len > f->size) {
-      len = f->size - f->open_offset;
-    }
+
+    size_t remain = f->size - f->open_offset;
+    if (len > remain) len = remain;
+
     ramdisk_write(buf, f->disk_offset + f->open_offset, len);
     ret = len;
   }
@@ -115,9 +118,8 @@ off_t fs_lseek(int fd, off_t offset, int whence) {
   assert(fd >= 0 && fd < NR_FILES);
   Finfo *f = &file_table[fd];
 
-  if (fd == FD_EVENTS || fd == FD_DISPINFO || fd == FD_FB ||
-      fd == FD_STDIN || fd == FD_STDOUT || fd == FD_STDERR) {
-    return 0;
+  if (fd == FD_EVENTS || fd == FD_STDIN || fd == FD_STDOUT || fd == FD_STDERR) {
+    return -1;
   }
 
   off_t new_offset = 0;
@@ -135,11 +137,11 @@ off_t fs_lseek(int fd, off_t offset, int whence) {
   f->open_offset = (size_t)new_offset;
   return new_offset;
 }
+
 int fs_close(int fd) {
   assert(fd >= 0 && fd < NR_FILES);
   return 0;
 }
-
 
 int fs_fstat(int fd, struct stat *buf) {
   assert(fd >= 0 && fd < NR_FILES);
@@ -149,10 +151,10 @@ int fs_fstat(int fd, struct stat *buf) {
 
   if (fd == FD_STDIN || fd == FD_STDOUT || fd == FD_STDERR ||
       fd == FD_EVENTS || fd == FD_DISPINFO || fd == FD_FB) {
-    buf->st_mode = S_IFCHR | 0666;
-    buf->st_size = 0;
+    buf->st_mode = S_IFCHR;
+    buf->st_size = file_table[fd].size;
   } else {
-    buf->st_mode = S_IFREG | 0644;
+    buf->st_mode = S_IFREG;
     buf->st_size = file_table[fd].size;
   }
 
