@@ -1,49 +1,40 @@
 #include <stdio.h>
 #include <assert.h>
-#include <string.h>
-#include <errno.h>
-#include <unistd.h>
 
 int main() {
   FILE *fp = fopen("/share/files/num", "r+");
   assert(fp);
 
-  int fd = fileno(fp);
-  printf("fileno = %d\n", fd);
+  fseek(fp, 0, SEEK_END);
+  long size = ftell(fp);
+  assert(size == 5000);
 
-  int ret = fseek(fp, 500 * 5, SEEK_SET);
-  printf("fseek ret = %d\n", ret);
-
-  char buf[33];
-  memset(buf, 0, sizeof(buf));
-  size_t nr = fread(buf, 1, 32, fp);
-
-  printf("after fread: nr=%d feof=%d ferror=%d errno=%d\n",
-         (int)nr, feof(fp), ferror(fp), errno);
-
-  printf("buf from fread: [");
-  for (int i = 0; i < (int)nr; i++) {
-    char c = buf[i];
-    if (c == '\n') printf("\\n");
-    else putchar(c);
+  fseek(fp, 500 * 5, SEEK_SET);
+  int i, n;
+  for (i = 500; i < 1000; i ++) {
+    fscanf(fp, "%d", &n);
+    assert(n == i + 1);
   }
-  printf("]\n");
 
-  // 再直接走低级接口验证一次
-  ret = lseek(fd, 500 * 5, SEEK_SET);
-  printf("lseek(fd) ret = %d\n", ret);
-
-  memset(buf, 0, sizeof(buf));
-  int nread = read(fd, buf, 32);
-  printf("after read: nread=%d errno=%d\n", nread, errno);
-
-  printf("buf from read: [");
-  for (int i = 0; i < nread; i++) {
-    char c = buf[i];
-    if (c == '\n') printf("\\n");
-    else putchar(c);
+  fseek(fp, 0, SEEK_SET);
+  for (i = 0; i < 500; i ++) {
+    fprintf(fp, "%4d\n", i + 1 + 1000);
   }
-  printf("]\n");
+
+  for (i = 500; i < 1000; i ++) {
+    fscanf(fp, "%d", &n);
+    assert(n == i + 1);
+  }
+
+  fseek(fp, 0, SEEK_SET);
+  for (i = 0; i < 500; i ++) {
+    fscanf(fp, "%d", &n);
+    assert(n == i + 1 + 1000);
+  }
+
+  fclose(fp);
+
+  printf("PASS!!!\n");
 
   return 0;
 }
