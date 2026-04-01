@@ -6,13 +6,13 @@
 
 void do_syscall(Context *c);
 
-static Context* do_event(Event e, Context* c) {
+static Context *do_event(Event e, Context *c) {
   switch (e.event) {
     case EVENT_YIELD:
       return schedule(c);
     case EVENT_SYSCALL:
       do_syscall(c);
-      c->mepc += 4;
+      c->mepc += 4;  // 必须保留！
       return c;
     case EVENT_IRQ_TIMER:
       return c;
