@@ -14,6 +14,7 @@
 static uintptr_t loader(PCB *pcb, const char *filename) {
   Elf_Ehdr ehdr;
   int fd = fs_open(filename, 0, 0);
+  if (fd < 0) panic("loader: open %s failed", filename);
 
   fs_read(fd, &ehdr, sizeof(ehdr));
   fs_lseek(fd, ehdr.e_phoff, SEEK_SET);
@@ -21,18 +22,17 @@ static uintptr_t loader(PCB *pcb, const char *filename) {
   Elf_Phdr phdr[ehdr.e_phnum];
   fs_read(fd, phdr, ehdr.e_phnum * sizeof(Elf_Phdr));
 
-  for (int i = 0; i < ehdr.e_phnum; i++) {
+  for (int i=0; i<ehdr.e_phnum; i++) {
     if (phdr[i].p_type != PT_LOAD) continue;
-
     fs_lseek(fd, phdr[i].p_offset, SEEK_SET);
     fs_read(fd, (void *)phdr[i].p_vaddr, phdr[i].p_filesz);
 
-    if (phdr[i].p_memsz > phdr[i].p_filesz) {
-      memset((void *)(phdr[i].p_vaddr + phdr[i].p_filesz), 0,
-             phdr[i].p_memsz - phdr[i].p_filesz);
+    // 修复：安全清零bss
+    size_t bss_size = phdr[i].p_memsz - phdr[i].p_filesz;
+    if (bss_size > 0) {
+      memset((void *)(phdr[i].p_vaddr + phdr[i].p_filesz), 0, bss_size);
     }
   }
-
   fs_close(fd);
   return ehdr.e_entry;
 }
@@ -40,5 +40,5 @@ static uintptr_t loader(PCB *pcb, const char *filename) {
 void naive_uload(PCB *pcb, const char *filename) {
   uintptr_t entry = loader(pcb, filename);
   Log("Jump to entry = %p", (void *)entry);
-  ((void (*)())entry)();
+  ((void(*)())entry)();
 }
