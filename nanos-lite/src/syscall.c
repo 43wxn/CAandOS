@@ -5,7 +5,6 @@
 #include <sys/time.h>
 #include "syscall.h"
 
-// 32位用户态兼容结构体
 typedef struct {
   int32_t tv_sec;
   int32_t tv_usec;
@@ -25,8 +24,8 @@ void do_syscall(Context *c) {
 
   switch (a[0]) {
     case SYS_exit:
-      Log("SYS_exit(status=%d)", (int)a[1]);
-      halt(a[1]);
+      // ===================== 【修复 2：正确退出】 =====================
+      halt((int)a[1]);
       break;
 
     case SYS_yield:
@@ -55,12 +54,11 @@ void do_syscall(Context *c) {
       break;
 
     case SYS_fstat:
-      // 修复：真正调用fs_fstat
       c->GPRx = fs_fstat((int)a[1], (struct stat *)a[2]);
       break;
 
     case SYS_brk:
-      c->GPRx = 0; // 简易实现
+      c->GPRx = 0;
       break;
 
     case SYS_gettimeofday: {
@@ -79,20 +77,8 @@ void do_syscall(Context *c) {
       break;
     }
 
-    case SYS_time:
-    case SYS_signal:
-    case SYS_times:
-    case SYS_kill:
-    case SYS_getpid:
-    case SYS_execve:
-    case SYS_fork:
-    case SYS_link:
-    case SYS_unlink:
-    case SYS_wait:
-      c->GPRx = -1;
-      break;
-
     default:
+      c->GPRx = -1;
       panic("Unhandled syscall ID = %d", (int)a[0]);
   }
 }

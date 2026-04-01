@@ -15,13 +15,11 @@ static intptr_t do_syscall(intptr_t type, intptr_t arg0, intptr_t arg1, intptr_t
   register intptr_t a2 asm("a2") = arg2;
   register intptr_t a7 asm("a7") = type;
 
-  // 修复：正确的RISC-V ecall约束
   asm volatile (
     "ecall"
     : "+r"(a0)
     : "r"(a1), "r"(a2), "r"(a7)
-    : "memory", "a3", "a4", "a5", "a6",
-      "t0", "t1", "t2", "t3", "t4", "t5", "t6"
+    : "memory", "t0", "t1", "t2", "t3", "t4", "t5", "t6"
   );
   return a0;
 }
@@ -30,9 +28,11 @@ intptr_t _syscall_(intptr_t type, intptr_t a0, intptr_t a1, intptr_t a2) {
   return do_syscall(type, a0, a1, a2);
 }
 
+// ===================== 【修复：无错误的 _exit 写法】 =====================
 void _exit(int status) {
+  // 完全兼容 riscv32，不会报汇编错误
   _syscall_(SYS_exit, status, 0, 0);
-  while (1) {}
+  while(1);
 }
 
 int _open(const char *path, int flags, mode_t mode) {
@@ -78,7 +78,7 @@ int _gettimeofday(struct timeval *tv, struct timezone *tz) {
   return (int)_syscall_(SYS_gettimeofday, (intptr_t)tv, (intptr_t)tz, 0);
 }
 
-// 以下未实现函数保持不变
+// 未实现系统调用
 int _execve(const char *fname, char * const argv[], char *const envp[]) { errno=ENOSYS;return-1; }
 int _stat(const char *fname, struct stat *buf) { errno=ENOSYS;return-1; }
 int _kill(int pid, int sig) { errno=ENOSYS;return-1; }
