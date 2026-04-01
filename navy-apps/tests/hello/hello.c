@@ -3,6 +3,7 @@
 int main() {
   write(1, "HELLO_MARKER_20260401\n", 22);
   int i = 2;
+  write(2, "LOOP\n", 5);
   volatile int j = 0;
   while (1) {
     j ++;
