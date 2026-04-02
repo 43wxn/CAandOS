@@ -2,7 +2,7 @@
 #include <am.h>
 #include <fs.h>
 #include "syscall.h"
-
+#include "proc.h"
 typedef struct {
   uint32_t tv_sec;
   uint32_t tv_usec;
@@ -23,7 +23,8 @@ void do_syscall(Context *c) {
   switch (a[0]) {
     case SYS_exit:
       Log("SYS_exit(status=%d)", (int)a[1]);
-      halt(a[1]);
+      naive_uload(NULL, "/bin/nterm");
+      panic("SYS_exit should not return");
       break;
 
     case SYS_yield:
@@ -80,8 +81,19 @@ void do_syscall(Context *c) {
     case SYS_signal:
     case SYS_times:
     case SYS_kill:
-    case SYS_getpid:
+      c->GPRx = -1;
+      break;
+   
     case SYS_execve:
+      naive_uload(NULL, (const char *)a[1]);
+      c->GPRx = -1; // 正常不会返回
+      break;
+
+    case SYS_getpid:
+      c->GPRx = 1;
+      break;
+
+
     case SYS_fork:
     case SYS_link:
     case SYS_unlink:

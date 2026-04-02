@@ -132,9 +132,7 @@ int _gettimeofday(struct timeval *tv, struct timezone *tz) {
 }
 
 int _execve(const char *fname, char * const argv[], char *const envp[]) {
-  (void)fname; (void)argv; (void)envp;
-  errno = ENOSYS;
-  return -1;
+  return (int)_syscall_(SYS_execve, (intptr_t)fname, (intptr_t)argv, (intptr_t)envp);
 }
 
 int _stat(const char *fname, struct stat *buf) {
