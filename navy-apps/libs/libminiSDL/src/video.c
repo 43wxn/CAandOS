@@ -3,16 +3,113 @@
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
+
+static void sdl_video_unsupported(const char *name) {
+  fprintf(stderr, "[miniSDL] Unsupported video API called: %s\n", name);
+  assert(0);
+}
 
 void SDL_BlitSurface(SDL_Surface *src, SDL_Rect *srcrect, SDL_Surface *dst, SDL_Rect *dstrect) {
   assert(dst && src);
   assert(dst->format->BitsPerPixel == src->format->BitsPerPixel);
+
+  int sx = srcrect ? srcrect->x : 0;
+  int sy = srcrect ? srcrect->y : 0;
+  int sw = srcrect ? srcrect->w : src->w;
+  int sh = srcrect ? srcrect->h : src->h;
+
+  int dx = dstrect ? dstrect->x : 0;
+  int dy = dstrect ? dstrect->y : 0;
+
+  int bpp = src->format->BytesPerPixel;
+  for (int y = 0; y < sh; y++) {
+    void *sp = (uint8_t *)src->pixels + (sy + y) * src->pitch + sx * bpp;
+    void *dp = (uint8_t *)dst->pixels + (dy + y) * dst->pitch + dx * bpp;
+    memcpy(dp, sp, sw * bpp);
+  }
+
+  if (dstrect) {
+    dstrect->w = sw;
+    dstrect->h = sh;
+  }
 }
 
 void SDL_FillRect(SDL_Surface *dst, SDL_Rect *dstrect, uint32_t color) {
+  assert(dst);
+
+  int x = dstrect ? dstrect->x : 0;
+  int y = dstrect ? dstrect->y : 0;
+  int w = dstrect ? dstrect->w : dst->w;
+  int h = dstrect ? dstrect->h : dst->h;
+
+  assert(x >= 0 && y >= 0);
+  assert(x + w <= dst->w && y + h <= dst->h);
+
+  if (dst->format->BitsPerPixel == 32) {
+    for (int j = 0; j < h; j++) {
+      uint32_t *row = (uint32_t *)((uint8_t *)dst->pixels + (y + j) * dst->pitch) + x;
+      for (int i = 0; i < w; i++) {
+        row[i] = color;
+      }
+    }
+  } else if (dst->format->BitsPerPixel == 8) {
+    uint8_t c = (uint8_t)color;
+    for (int j = 0; j < h; j++) {
+      uint8_t *row = (uint8_t *)dst->pixels + (y + j) * dst->pitch + x;
+      memset(row, c, w);
+    }
+  } else {
+    assert(0);
+  }
 }
 
 void SDL_UpdateRect(SDL_Surface *s, int x, int y, int w, int h) {
+  assert(s);
+  assert(s->flags & SDL_HWSURFACE);
+
+  if (x == 0 && y == 0 && w == 0 && h == 0) {
+    x = 0; y = 0; w = s->w; h = s->h;
+  }
+
+  if (w == 0) w = s->w;
+  if (h == 0) h = s->h;
+
+  assert(x >= 0 && y >= 0);
+  assert(x + w <= s->w && y + h <= s->h);
+
+  if (s->format->BitsPerPixel == 32) {
+    uint32_t *pixels = (uint32_t *)malloc(w * h * sizeof(uint32_t));
+    assert(pixels);
+
+    for (int j = 0; j < h; j++) {
+      uint32_t *src = (uint32_t *)((uint8_t *)s->pixels + (y + j) * s->pitch) + x;
+      memcpy(pixels + j * w, src, w * sizeof(uint32_t));
+    }
+
+    NDL_DrawRect(pixels, x, y, w, h);
+    free(pixels);
+  } else if (s->format->BitsPerPixel == 8) {
+    assert(s->format->palette);
+    assert(s->format->palette->colors);
+
+    uint32_t *pixels = (uint32_t *)malloc(w * h * sizeof(uint32_t));
+    assert(pixels);
+
+    for (int j = 0; j < h; j++) {
+      uint8_t *src = (uint8_t *)s->pixels + (y + j) * s->pitch + x;
+      for (int i = 0; i < w; i++) {
+        SDL_Color c = s->format->palette->colors[src[i]];
+        pixels[j * w + i] = ((uint32_t)c.a << 24) | ((uint32_t)c.r << 16) |
+                            ((uint32_t)c.g << 8) | (uint32_t)c.b;
+      }
+    }
+
+    NDL_DrawRect(pixels, x, y, w, h);
+    free(pixels);
+  } else {
+    assert(0);
+  }
 }
 
 // APIs below are already implemented.
@@ -108,9 +205,6 @@ void SDL_SoftStretch(SDL_Surface *src, SDL_Rect *srcrect, SDL_Surface *dst, SDL_
 
   assert(dstrect);
   if(w == dstrect->w && h == dstrect->h) {
-    /* The source rectangle and the destination rectangle
-     * are of the same size. If that is the case, there
-     * is no need to stretch, just copy. */
     SDL_Rect rect;
     rect.x = x;
     rect.y = y;
@@ -119,11 +213,12 @@ void SDL_SoftStretch(SDL_Surface *src, SDL_Rect *srcrect, SDL_Surface *dst, SDL_
     SDL_BlitSurface(src, &rect, dst, dstrect);
   }
   else {
-    assert(0);
+    sdl_video_unsupported("SDL_SoftStretch(non-identity)");
   }
 }
 
 void SDL_SetPalette(SDL_Surface *s, int flags, SDL_Color *colors, int firstcolor, int ncolors) {
+  (void)flags;
   assert(s);
   assert(s->format);
   assert(s->format->palette);
@@ -134,11 +229,6 @@ void SDL_SetPalette(SDL_Surface *s, int flags, SDL_Color *colors, int firstcolor
 
   if(s->flags & SDL_HWSURFACE) {
     assert(ncolors == 256);
-    for (int i = 0; i < ncolors; i ++) {
-      uint8_t r = colors[i].r;
-      uint8_t g = colors[i].g;
-      uint8_t b = colors[i].b;
-    }
     SDL_UpdateRect(s, 0, 0, 0, 0);
   }
 }
@@ -193,8 +283,10 @@ uint32_t SDL_MapRGBA(SDL_PixelFormat *fmt, uint8_t r, uint8_t g, uint8_t b, uint
 }
 
 int SDL_LockSurface(SDL_Surface *s) {
+  (void)s;
   return 0;
 }
 
 void SDL_UnlockSurface(SDL_Surface *s) {
+  (void)s;
 }
