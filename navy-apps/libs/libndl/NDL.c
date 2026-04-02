@@ -20,10 +20,6 @@ static int canvas_x = 0, canvas_y = 0;
 uint32_t NDL_GetTicks() {
   struct timeval tv;
   gettimeofday(&tv, NULL);
-
-
-  SDL_AudioUpdate();
-  
   return (uint32_t)(tv.tv_sec * 1000 + tv.tv_usec / 1000);
 }
 
