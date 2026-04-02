@@ -52,16 +52,22 @@ static size_t sbctl_read(void *buf, size_t offset, size_t len) {
   (void)offset;
   assert(len >= sizeof(int));
 
+  AM_AUDIO_CONFIG_T cfg;
   AM_AUDIO_STATUS_T stat;
+  ioe_read(AM_AUDIO_CONFIG, &cfg);
   ioe_read(AM_AUDIO_STATUS, &stat);
+
+  int free_bytes = cfg.bufsize - stat.count;
+  if (free_bytes < 0) free_bytes = 0;
 
   static int cnt = 0;
   if (cnt < 20) {
-    printf("[sbctl_read] free=%d\n", stat.count);
+    printf("[sbctl_read] bufsize=%d used=%d free=%d\n",
+        cfg.bufsize, stat.count, free_bytes);
     cnt++;
   }
 
-  memcpy(buf, &stat.count, sizeof(int));
+  memcpy(buf, &free_bytes, sizeof(int));
   return sizeof(int);
 }
 
@@ -94,17 +100,20 @@ static size_t sb_write(const void *buf, size_t offset, size_t len) {
   static int cnt = 0;
 
   while (written < len) {
+    AM_AUDIO_CONFIG_T cfg;
     AM_AUDIO_STATUS_T stat;
+    ioe_read(AM_AUDIO_CONFIG, &cfg);
     ioe_read(AM_AUDIO_STATUS, &stat);
 
-    int free_bytes = stat.count;
+    int free_bytes = cfg.bufsize - stat.count;
     if (free_bytes <= 0) continue;
 
     size_t n = len - written;
     if (n > (size_t)free_bytes) n = (size_t)free_bytes;
 
     if (cnt < 20) {
-      printf("[sb_write] free=%d write=%zu\n", free_bytes, n);
+      printf("[sb_write] bufsize=%d used=%d free=%d write=%zu\n",
+          cfg.bufsize, stat.count, free_bytes, n);
       cnt++;
     }
 
