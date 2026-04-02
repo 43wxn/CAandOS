@@ -25,6 +25,7 @@ int SDL_RemoveTimer(SDL_TimerID id) {
 void SDL_AudioUpdate(void);
 
 uint32_t SDL_GetTicks() {
+  SDL_AudioUpdate();
   return NDL_GetTicks();
 }
 

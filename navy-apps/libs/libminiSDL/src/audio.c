@@ -24,8 +24,31 @@ static int bytes_per_sample(uint16_t format) {
 }
 
 static void CallbackHelper() {
-  if (!g_audio_opened || g_audio_paused) return;
-  if (g_spec.callback == NULL) return;
+  static int dbg_cnt = 0;
+
+  if (!g_audio_opened) {
+    if (dbg_cnt < 5) {
+      printf("[audio] callback skip: not opened\n");
+      dbg_cnt++;
+    }
+    return;
+  }
+
+  if (g_audio_paused) {
+    if (dbg_cnt < 5) {
+      printf("[audio] callback skip: paused\n");
+      dbg_cnt++;
+    }
+    return;
+  }
+
+  if (g_spec.callback == NULL) {
+    if (dbg_cnt < 5) {
+      printf("[audio] callback skip: callback is NULL\n");
+      dbg_cnt++;
+    }
+    return;
+  }
 
   uint32_t now = NDL_GetTicks();
   if (now - g_last_tick < g_interval_ms) return;
@@ -36,6 +59,11 @@ static void CallbackHelper() {
   if (want_len <= 0) return;
 
   int free_bytes = NDL_QueryAudio();
+  if (dbg_cnt < 20) {
+    printf("[audio] callback run: free_bytes=%d want_len=%d\n", free_bytes, want_len);
+    dbg_cnt++;
+  }
+
   if (free_bytes <= 0) return;
 
   int len = want_len;
@@ -56,19 +84,27 @@ static void CallbackHelper() {
 
   memset(g_stream_buf, 0, len);
   g_spec.callback(g_spec.userdata, g_stream_buf, len);
+
+  if (dbg_cnt < 30) {
+    printf("[audio] play %d bytes\n", len);
+    dbg_cnt++;
+  }
+
   NDL_PlayAudio(g_stream_buf, len);
 }
-
 int SDL_OpenAudio(SDL_AudioSpec *desired, SDL_AudioSpec *obtained) {
   assert(desired != NULL);
 
   g_spec = *desired;
   g_audio_opened = 1;
-  g_audio_paused = 1;   // SDL 语义：打开后默认暂停
+  g_audio_paused = 0;   // 先强行直接播放，排除 SDL_PauseAudio(0) 没被调用的问题
   g_last_tick = NDL_GetTicks();
 
   g_interval_ms = desired->samples * 1000 / desired->freq;
   if (g_interval_ms == 0) g_interval_ms = 1;
+
+  printf("[audio] SDL_OpenAudio: freq=%d channels=%d samples=%d format=%d interval=%u ms\n",
+      desired->freq, desired->channels, desired->samples, desired->format, g_interval_ms);
 
   NDL_OpenAudio(desired->freq, desired->channels, desired->samples);
 
