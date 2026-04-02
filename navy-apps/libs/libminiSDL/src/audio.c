@@ -136,14 +136,34 @@ void SDL_PauseAudio(int pause_on) {
 
 void SDL_MixAudio(uint8_t *dst, uint8_t *src, uint32_t len, int volume) {
   assert(dst && src);
+
   if (volume <= 0) return;
   if (volume > SDL_MIX_MAXVOLUME) volume = SDL_MIX_MAXVOLUME;
 
-  for (uint32_t i = 0; i < len; i++) {
-    int sample = dst[i] + ((int)src[i] * volume) / SDL_MIX_MAXVOLUME;
-    if (sample > 255) sample = 255;
-    dst[i] = (uint8_t)sample;
+  if (g_spec.format == AUDIO_U8) {
+    for (uint32_t i = 0; i < len; i++) {
+      int sample = dst[i] + ((int)src[i] * volume) / SDL_MIX_MAXVOLUME;
+      if (sample > 255) sample = 255;
+      dst[i] = (uint8_t)sample;
+    }
+    return;
   }
+
+  if (g_spec.format == AUDIO_S16) {
+    int16_t *d = (int16_t *)dst;
+    int16_t *s = (int16_t *)src;
+    uint32_t n = len / 2;   // 每个 sample 2 字节
+
+    for (uint32_t i = 0; i < n; i++) {
+      int sample = d[i] + ((int)s[i] * volume) / SDL_MIX_MAXVOLUME;
+      if (sample > 32767) sample = 32767;
+      if (sample < -32768) sample = -32768;
+      d[i] = (int16_t)sample;
+    }
+    return;
+  }
+
+  assert(0);
 }
 
 SDL_AudioSpec *SDL_LoadWAV(const char *file,
