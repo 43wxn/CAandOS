@@ -6,6 +6,7 @@
 
 #define keyname(k) #k,
 
+void SDL_AudioUpdate();
 static const char *keyname[] = {
   "NONE",
   _KEYS(keyname)
@@ -35,6 +36,7 @@ int SDL_PushEvent(SDL_Event *ev) {
 }
 
 int SDL_PollEvent(SDL_Event *ev) {
+  SDL_AudioUpdate();
   char buf[64];
   int n = NDL_PollEvent(buf, sizeof(buf) - 1);
   if (n <= 0) return 0;
@@ -67,6 +69,7 @@ int SDL_PollEvent(SDL_Event *ev) {
 
 int SDL_WaitEvent(SDL_Event *event) {
   while (1) {
+    
     if (SDL_PollEvent(event)) return 1;
   }
 }

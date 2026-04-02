@@ -29,7 +29,9 @@ enum {
   FD_STDERR,
   FD_EVENTS,
   FD_DISPINFO,
-  FD_FB
+  FD_FB,
+  FD_SB,
+  FD_SBCTL
 };
 
 static size_t invalid_read(void *buf, size_t offset, size_t len) {
@@ -44,6 +46,68 @@ static size_t invalid_write(const void *buf, size_t offset, size_t len) {
   return 0;
 }
 
+/* ---------------- audio device ---------------- */
+
+static size_t sbctl_read(void *buf, size_t offset, size_t len) {
+  (void)offset;
+  assert(len >= sizeof(int));
+
+  AM_AUDIO_STATUS_T stat;
+  ioe_read(AM_AUDIO_STATUS, &stat);
+
+  memcpy(buf, &stat.count, sizeof(int));
+  return sizeof(int);
+}
+
+static size_t sbctl_write(const void *buf, size_t offset, size_t len) {
+  (void)offset;
+  assert(len >= 3 * sizeof(int));
+
+  const int *cfg = (const int *)buf;
+
+  AM_AUDIO_CTRL_T ctl = {
+    .freq = cfg[0],
+    .channels = cfg[1],
+    .samples = cfg[2],
+  };
+  ioe_write(AM_AUDIO_CTRL, &ctl);
+
+  return 3 * sizeof(int);
+}
+
+static size_t sb_write(const void *buf, size_t offset, size_t len) {
+  (void)offset;
+  if (len == 0) return 0;
+
+  const uint8_t *p = (const uint8_t *)buf;
+  size_t written = 0;
+
+  while (written < len) {
+    AM_AUDIO_STATUS_T stat;
+    ioe_read(AM_AUDIO_STATUS, &stat);
+
+    int free_bytes = stat.count;
+    if (free_bytes <= 0) continue;
+
+    size_t n = len - written;
+    if (n > (size_t)free_bytes) n = (size_t)free_bytes;
+
+    AM_AUDIO_PLAY_T ctl = {
+      .buf = {
+        .start = (void *)(p + written),
+        .end   = (void *)(p + written + n),
+      },
+    };
+    ioe_write(AM_AUDIO_PLAY, &ctl);
+
+    written += n;
+  }
+
+  return written;
+}
+
+/* ---------------- file table ---------------- */
+
 static Finfo file_table[] __attribute__((used)) = {
   [FD_STDIN]    = {"stdin",          0, 0, invalid_read,  invalid_write, 0},
   [FD_STDOUT]   = {"stdout",         0, 0, invalid_read,  serial_write,  0},
@@ -51,6 +115,8 @@ static Finfo file_table[] __attribute__((used)) = {
   [FD_EVENTS]   = {"/dev/events",    0, 0, events_read,   invalid_write, 0},
   [FD_DISPINFO] = {"/proc/dispinfo", 0, 0, dispinfo_read, invalid_write, 0},
   [FD_FB]       = {"/dev/fb",        0, 0, invalid_read,  fb_write,      0},
+  [FD_SB]       = {"/dev/sb",        0, 0, invalid_read,  sb_write,      0},
+  [FD_SBCTL]    = {"/dev/sbctl",     0, 0, sbctl_read,    sbctl_write,   0},
 #include "files.h"
 };
 
@@ -134,6 +200,8 @@ size_t fs_lseek(int fd, off_t offset, int whence) {
   assert(fd >= 0 && fd < NR_FILES);
   Finfo *f = &file_table[fd];
 
+  assert(fd != FD_SB && fd != FD_SBCTL);
+
   off_t new_offset = 0;
   switch (whence) {
     case SEEK_SET: new_offset = offset; break;
@@ -158,7 +226,8 @@ int fs_fstat(int fd, struct stat *buf) {
   assert(buf != NULL);
 
   if (fd == FD_STDIN || fd == FD_STDOUT || fd == FD_STDERR ||
-      fd == FD_EVENTS || fd == FD_DISPINFO || fd == FD_FB) {
+      fd == FD_EVENTS || fd == FD_DISPINFO || fd == FD_FB ||
+      fd == FD_SB || fd == FD_SBCTL) {
     buf->st_mode = S_IFCHR;
     buf->st_size = 0;
   } else {

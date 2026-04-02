@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+void SDL_AudioUpdate();
 static void sdl_video_unsupported(const char *name) {
   fprintf(stderr, "[miniSDL] Unsupported video API called: %s\n", name);
   assert(0);
@@ -65,6 +66,7 @@ void SDL_FillRect(SDL_Surface *dst, SDL_Rect *dstrect, uint32_t color) {
 }
 
 void SDL_UpdateRect(SDL_Surface *s, int x, int y, int w, int h) {
+  SDL_AudioUpdate();
   assert(s);
   assert(s->flags & SDL_HWSURFACE);
 
