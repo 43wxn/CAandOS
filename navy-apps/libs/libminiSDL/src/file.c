@@ -3,90 +3,107 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
-static int rw_stdio_seek(SDL_RWops *ctx, int offset, int whence) {
+typedef struct {
+  SDL_RWops rw;
+  FILE *fp;
+} RWopsStdio;
+
+typedef struct {
+  SDL_RWops rw;
+  uint8_t *base;
+  uint8_t *here;
+  uint8_t *stop;
+} RWopsMem;
+
+static int64_t rw_stdio_seek(SDL_RWops *ctx, int64_t offset, int whence) {
   assert(ctx);
-  assert(ctx->hidden.stdio.fp);
-  fseek(ctx->hidden.stdio.fp, offset, whence);
-  return ftell(ctx->hidden.stdio.fp);
+  RWopsStdio *s = (RWopsStdio *)ctx;
+  assert(s->fp);
+
+  if (fseek(s->fp, (long)offset, whence) != 0) {
+    return -1;
+  }
+  return (int64_t)ftell(s->fp);
 }
 
-static int rw_stdio_read(SDL_RWops *ctx, void *ptr, int size, int maxnum) {
+static size_t rw_stdio_read(SDL_RWops *ctx, void *ptr, size_t size, size_t maxnum) {
   assert(ctx);
-  assert(ctx->hidden.stdio.fp);
-  return fread(ptr, size, maxnum, ctx->hidden.stdio.fp);
+  RWopsStdio *s = (RWopsStdio *)ctx;
+  assert(s->fp);
+  return fread(ptr, size, maxnum, s->fp);
 }
 
-static int rw_stdio_write(SDL_RWops *ctx, const void *ptr, int size, int num) {
+static size_t rw_stdio_write(SDL_RWops *ctx, const void *ptr, size_t size, size_t num) {
   assert(ctx);
-  assert(ctx->hidden.stdio.fp);
-  return fwrite(ptr, size, num, ctx->hidden.stdio.fp);
+  RWopsStdio *s = (RWopsStdio *)ctx;
+  assert(s->fp);
+  return fwrite(ptr, size, num, s->fp);
 }
 
 static int rw_stdio_close(SDL_RWops *ctx) {
   assert(ctx);
+  RWopsStdio *s = (RWopsStdio *)ctx;
   int ret = 0;
-  if (ctx->hidden.stdio.fp) {
-    ret = fclose(ctx->hidden.stdio.fp);
+  if (s->fp) {
+    ret = fclose(s->fp);
   }
-  free(ctx);
+  free(s);
   return ret;
 }
 
-static int rw_mem_seek(SDL_RWops *ctx, int offset, int whence) {
+static int64_t rw_mem_seek(SDL_RWops *ctx, int64_t offset, int whence) {
   assert(ctx);
-  uint8_t *base = (uint8_t *)ctx->hidden.mem.base;
-  uint8_t *here = (uint8_t *)ctx->hidden.mem.here;
-  uint8_t *stop = (uint8_t *)ctx->hidden.mem.stop;
-  uint8_t *newpos = NULL;
+  RWopsMem *m = (RWopsMem *)ctx;
 
+  uint8_t *newpos = NULL;
   switch (whence) {
-    case SEEK_SET: newpos = base + offset; break;
-    case SEEK_CUR: newpos = here + offset; break;
-    case SEEK_END: newpos = stop + offset; break;
+    case SEEK_SET: newpos = m->base + offset; break;
+    case SEEK_CUR: newpos = m->here + offset; break;
+    case SEEK_END: newpos = m->stop + offset; break;
     default: assert(0);
   }
 
-  if (newpos < base) newpos = base;
-  if (newpos > stop) newpos = stop;
+  if (newpos < m->base) newpos = m->base;
+  if (newpos > m->stop) newpos = m->stop;
 
-  ctx->hidden.mem.here = newpos;
-  return (int)(newpos - base);
+  m->here = newpos;
+  return (int64_t)(m->here - m->base);
 }
 
-static int rw_mem_read(SDL_RWops *ctx, void *ptr, int size, int maxnum) {
+static size_t rw_mem_read(SDL_RWops *ctx, void *ptr, size_t size, size_t maxnum) {
   assert(ctx);
-  if (size <= 0 || maxnum <= 0) return 0;
+  RWopsMem *m = (RWopsMem *)ctx;
 
-  uint8_t *here = (uint8_t *)ctx->hidden.mem.here;
-  uint8_t *stop = (uint8_t *)ctx->hidden.mem.stop;
-  int bytes = size * maxnum;
-  int remain = (int)(stop - here);
-  if (remain <= 0) return 0;
+  if (size == 0 || maxnum == 0) return 0;
+
+  size_t bytes = size * maxnum;
+  size_t remain = (size_t)(m->stop - m->here);
   if (bytes > remain) bytes = remain;
 
-  memcpy(ptr, here, bytes);
-  ctx->hidden.mem.here = here + bytes;
+  memcpy(ptr, m->here, bytes);
+  m->here += bytes;
   return bytes / size;
 }
 
-static int rw_mem_write(SDL_RWops *ctx, const void *ptr, int size, int num) {
+static size_t rw_mem_write(SDL_RWops *ctx, const void *ptr, size_t size, size_t num) {
   assert(ctx);
-  if (size <= 0 || num <= 0) return 0;
+  RWopsMem *m = (RWopsMem *)ctx;
 
-  uint8_t *here = (uint8_t *)ctx->hidden.mem.here;
-  uint8_t *stop = (uint8_t *)ctx->hidden.mem.stop;
-  int bytes = size * num;
-  int remain = (int)(stop - here);
-  if (remain <= 0) return 0;
+  if (size == 0 || num == 0) return 0;
+
+  size_t bytes = size * num;
+  size_t remain = (size_t)(m->stop - m->here);
   if (bytes > remain) bytes = remain;
 
-  memcpy(here, ptr, bytes);
-  ctx->hidden.mem.here = here + bytes;
+  memcpy(m->here, ptr, bytes);
+  m->here += bytes;
   return bytes / size;
 }
 
 static int rw_mem_close(SDL_RWops *ctx) {
+  assert(ctx);
   free(ctx);
   return 0;
 }
@@ -95,30 +112,34 @@ SDL_RWops* SDL_RWFromFile(const char *filename, const char *mode) {
   FILE *fp = fopen(filename, mode);
   if (fp == NULL) return NULL;
 
-  SDL_RWops *ops = (SDL_RWops *)malloc(sizeof(SDL_RWops));
+  RWopsStdio *ops = (RWopsStdio *)malloc(sizeof(RWopsStdio));
   assert(ops);
 
-  ops->seek = rw_stdio_seek;
-  ops->read = rw_stdio_read;
-  ops->write = rw_stdio_write;
-  ops->close = rw_stdio_close;
-  ops->hidden.stdio.fp = fp;
-  return ops;
+  memset(ops, 0, sizeof(*ops));
+  ops->rw.seek = rw_stdio_seek;
+  ops->rw.read = rw_stdio_read;
+  ops->rw.write = rw_stdio_write;
+  ops->rw.close = rw_stdio_close;
+  ops->fp = fp;
+
+  return (SDL_RWops *)ops;
 }
 
 SDL_RWops* SDL_RWFromMem(void *mem, int size) {
   assert(mem);
   assert(size >= 0);
 
-  SDL_RWops *ops = (SDL_RWops *)malloc(sizeof(SDL_RWops));
+  RWopsMem *ops = (RWopsMem *)malloc(sizeof(RWopsMem));
   assert(ops);
 
-  ops->seek = rw_mem_seek;
-  ops->read = rw_mem_read;
-  ops->write = rw_mem_write;
-  ops->close = rw_mem_close;
-  ops->hidden.mem.base = mem;
-  ops->hidden.mem.here = mem;
-  ops->hidden.mem.stop = (uint8_t *)mem + size;
-  return ops;
+  memset(ops, 0, sizeof(*ops));
+  ops->rw.seek = rw_mem_seek;
+  ops->rw.read = rw_mem_read;
+  ops->rw.write = rw_mem_write;
+  ops->rw.close = rw_mem_close;
+  ops->base = (uint8_t *)mem;
+  ops->here = (uint8_t *)mem;
+  ops->stop = (uint8_t *)mem + size;
+
+  return (SDL_RWops *)ops;
 }

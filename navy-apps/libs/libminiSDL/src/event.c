@@ -59,7 +59,6 @@ int SDL_PollEvent(SDL_Event *ev) {
     memset(ev, 0, sizeof(*ev));
     ev->type = is_keydown ? SDL_KEYDOWN : SDL_KEYUP;
     ev->key.type = ev->type;
-    ev->key.state = is_keydown ? SDL_PRESSED : SDL_RELEASED;
     ev->key.keysym.sym = code;
   }
 
@@ -81,7 +80,7 @@ int SDL_PeepEvents(SDL_Event *ev, int numevents, int action, uint32_t mask) {
   return -1;
 }
 
-uint8_t *SDL_GetKeyState(int *numkeys) {
+uint8_t* SDL_GetKeyState(int *numkeys) {
   if (numkeys) {
     *numkeys = sizeof(key_state) / sizeof(key_state[0]);
   }

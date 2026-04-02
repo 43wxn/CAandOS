@@ -15,7 +15,7 @@ void switch_boot_pcb() {
 void init_proc() {
   switch_boot_pcb();
   Log("Initializing processes...");
-  naive_uload(NULL, "/bin/bmp-test");
+  naive_uload(NULL, "/bin/nterm");
 }
 
 Context* schedule(Context *prev) {

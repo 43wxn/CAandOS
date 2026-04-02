@@ -1,4 +1,4 @@
 NAME = nterm
 SRCS = $(shell find src/ -name "*.cpp")
-LIBS += libminiSDL libbdf
+LIBS += libminiSDL libbdf libndl
 include $(NAVY_HOME)/Makefile
