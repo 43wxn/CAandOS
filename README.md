@@ -6,11 +6,13 @@
 
 
 和navy apps以及nanos相关
-1.编译程序make ISA=riscv32
-2.删除build（直接在vscode里找改了哪个文件夹下的代码）
+1.编译程序（在想要跑的app或test目录下）make ISA=riscv32
+2.删除build（直接在vscode里找改了哪个文件夹下的代码，就删除哪个文件夹的build）
 3.在nanos-lite文件夹下
 ~/ics2025/nanos-lite$ make ARCH=riscv32-nemu update
 重新编译nanos-lite,以及导入相关的程序，navy根目录makefile的180可见
 要把哪些程序烧到镜像里面
 
-
+4.在nanos-lite
+~/ics2025/nanos-lite$ make ARCH=riscv32-nemu run
+启动命令行（这里我把程序改成了默认进入）
