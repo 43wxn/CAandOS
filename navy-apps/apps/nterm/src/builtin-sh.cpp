@@ -20,7 +20,7 @@ static void sh_printf(const char *format, ...) {
 }
 
 static void sh_banner() {
-  sh_printf("Built-in Shell in NTerm (NJU Terminal)\n\n");
+  sh_printf("Built-in Shell in DTerm (DLUT Terminal)\n\n");
 }
 
 static void sh_prompt() {
