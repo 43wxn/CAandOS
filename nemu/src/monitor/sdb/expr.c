@@ -24,8 +24,8 @@
 #include <memory/vaddr.h>
 
 enum {
-  TK_NOTYPE = 256, TK_EQ,
-
+  TK_NOTYPE = 256, 
+  TK_EQ,
   /* TODO: Add more token types */
   TK_NUM,      // decimal number
   TK_HEX,      // hexadecimal number
@@ -45,6 +45,9 @@ static struct rule {
    * Pay attention to the precedence level of different rules.
    */
 
+  // +   表示前面的内容出现一次或多次
+  // *   表示前面的内容出现零次或多次
+  // ( ) 表示分组在 C 字符串里，反斜杠本身也要转义，所以写成：
   {" +",        TK_NOTYPE}, // spaces
   {"0[xX][0-9a-fA-F]+", TK_HEX}, // hex number
   {"\\$[a-zA-Z0-9]+", TK_REG},   // register
@@ -130,6 +133,7 @@ static bool make_token(char *e) {
           case TK_NOTYPE:
             break;
 
+          //数字、十六进制、寄存器：需要保存字符串
           case TK_NUM:
           case TK_HEX:
           case TK_REG:
@@ -142,7 +146,8 @@ static bool make_token(char *e) {
             tokens[nr_token].str[substr_len] = '\0';
             nr_token++;
             break;
-
+          
+          // 其他符号：只记录类型，不保存字符串
           case TK_EQ:
           case TK_NEQ:
           case TK_AND:
@@ -222,6 +227,10 @@ static int precedence(int type) {
   }
 }
 
+static bool is_unary_operator(int type) {
+  return type == TK_NEG || type == TK_DEREF;
+}
+
 static int find_main_operator(int p, int q) {
   int main_op = -1;
   int min_prec = 100;
@@ -252,15 +261,24 @@ static int find_main_operator(int p, int q) {
       case TK_NEG:
       case TK_DEREF: {
         int prec = precedence(type);
-        /* 我补充: 对于同优先级, 取最右边的运算符, 适配常见左结合;
-         * 单目运算在当前写法下也能正常递归处理
-         */
-        if (prec <= min_prec) {
+
+        if (prec < min_prec) {
           min_prec = prec;
           main_op = i;
         }
+        else if (prec == min_prec) {
+          /*
+           * 二元左结合运算符：同优先级取右边
+           * 单目前缀运算符：同优先级保留左边
+           */
+          if (!is_unary_operator(type)) {
+            main_op = i;
+          }
+        }
+
         break;
       }
+
       default:
         break;
     }
