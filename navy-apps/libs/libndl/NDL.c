@@ -59,6 +59,13 @@ void NDL_DrawRect(uint32_t *pixels, int x, int y, int w, int h) {
   assert(fbdev >= 0);
   assert(pixels != NULL);
 
+  if (x == 0 && w == screen_w) {
+    off_t off = (canvas_y + y) * screen_w * 4;
+    lseek(fbdev, off, SEEK_SET);
+    write(fbdev, pixels, w * h * 4);
+    return;
+  }
+
   for (int j = 0; j < h; j++) {
     off_t off = ((canvas_y + y + j) * screen_w + (canvas_x + x)) * 4;
     lseek(fbdev, off, SEEK_SET);
