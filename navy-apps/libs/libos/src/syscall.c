@@ -48,7 +48,9 @@ int _open(const char *path, int flags, mode_t mode) {
     errno = EINVAL;
     return -1;
   }
-  return (int)_syscall_(SYS_open, (intptr_t)path, flags, mode);
+  int ret = (int)_syscall_(SYS_open, (intptr_t)path, flags, mode);
+  if (ret < 0) errno = ENOENT;
+  return ret;
 }
 
 ssize_t _read(int fd, void *buf, size_t count) {
@@ -56,7 +58,9 @@ ssize_t _read(int fd, void *buf, size_t count) {
     errno = EINVAL;
     return -1;
   }
-  return (ssize_t)_syscall_(SYS_read, fd, (intptr_t)buf, count);
+  ssize_t ret = (ssize_t)_syscall_(SYS_read, fd, (intptr_t)buf, count);
+  if (ret < 0) errno = EIO;
+  return ret;
 }
 
 ssize_t _write(int fd, const void *buf, size_t count) {
@@ -64,7 +68,9 @@ ssize_t _write(int fd, const void *buf, size_t count) {
     errno = EINVAL;
     return -1;
   }
-  return (ssize_t)_syscall_(SYS_write, fd, (intptr_t)buf, count);
+  ssize_t ret = (ssize_t)_syscall_(SYS_write, fd, (intptr_t)buf, count);
+  if (ret < 0) errno = EIO;
+  return ret;
 }
 
 int _close(int fd) {
@@ -103,16 +109,9 @@ int _fstat(int fd, struct stat *buf) {
   }
 
   memset(buf, 0, sizeof(*buf));
-
-  if (fd >= 0 && fd <= 5) {
-    buf->st_mode = S_IFCHR;
-    buf->st_size = 0;
-  } else {
-    buf->st_mode = S_IFREG;
-    buf->st_size = 0;
-  }
-
-  return 0;
+  int ret = (int)_syscall_(SYS_fstat, fd, (intptr_t)buf, 0);
+  if (ret < 0) errno = EBADF;
+  return ret;
 }
 
 int _gettimeofday(struct timeval *tv, struct timezone *tz) {
@@ -132,7 +131,9 @@ int _gettimeofday(struct timeval *tv, struct timezone *tz) {
 }
 
 int _execve(const char *fname, char * const argv[], char *const envp[]) {
-  return (int)_syscall_(SYS_execve, (intptr_t)fname, (intptr_t)argv, (intptr_t)envp);
+  int ret = (int)_syscall_(SYS_execve, (intptr_t)fname, (intptr_t)argv, (intptr_t)envp);
+  if (ret < 0) errno = ENOENT;
+  return ret;
 }
 
 int _stat(const char *fname, struct stat *buf) {
@@ -166,9 +167,9 @@ int _link(const char *d, const char *n) {
 }
 
 int _unlink(const char *n) {
-  (void)n;
-  errno = ENOSYS;
-  return -1;
+  int ret = (int)_syscall_(SYS_unlink, (intptr_t)n, 0, 0);
+  if (ret < 0) errno = ENOENT;
+  return ret;
 }
 
 pid_t _wait(int *status) {

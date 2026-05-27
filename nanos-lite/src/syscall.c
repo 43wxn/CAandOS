@@ -96,9 +96,12 @@ void do_syscall(Context *c) {
 
     case SYS_fork:
     case SYS_link:
-    case SYS_unlink:
     case SYS_wait:
       c->GPRx = -1;
+      break;
+
+    case SYS_unlink:
+      c->GPRx = fs_unlink((const char *)a[1]);
       break;
 
     default:

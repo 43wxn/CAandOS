@@ -12,8 +12,13 @@
 #endif
 
 static uintptr_t loader(PCB *pcb, const char *filename) {
+  (void)pcb;
   Elf_Ehdr ehdr;
   int fd = fs_open(filename, 0, 0);
+  if (fd < 0) {
+    Log("loader: file not found: %s", filename);
+    return 0;
+  }
 
   fs_read(fd, &ehdr, sizeof(ehdr));
   fs_lseek(fd, ehdr.e_phoff, SEEK_SET);
@@ -40,6 +45,10 @@ static uintptr_t loader(PCB *pcb, const char *filename) {
 void naive_uload(PCB *pcb, const char *filename) {
   Log("naive_uload: %s", filename);
   uintptr_t entry = loader(pcb, filename);
+  if (entry == 0) {
+    Log("naive_uload failed: %s", filename);
+    return;
+  }
   Log("Jump to entry = %p", (void *)entry);
   ((void (*)())entry)();
 }
