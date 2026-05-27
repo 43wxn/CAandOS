@@ -104,6 +104,10 @@ void do_syscall(Context *c) {
       c->GPRx = fs_unlink((const char *)a[1]);
       break;
 
+    case SYS_shutdown:
+      halt((int)a[1]);
+      break;
+
     default:
       panic("Unhandled syscall ID = %d", (int)a[0]);
   }

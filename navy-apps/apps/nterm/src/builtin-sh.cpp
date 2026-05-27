@@ -8,7 +8,10 @@
 #include <fcntl.h>
 #include <sys/time.h>
 
+#define SYS_shutdown 20
+
 char handle_key(SDL_Event *ev);
+extern "C" intptr_t _syscall_(intptr_t type, intptr_t a0, intptr_t a1, intptr_t a2);
 
 static void sh_printf(const char *format, ...) {
   static char buf[512] = {};
@@ -71,7 +74,10 @@ static void cmd_help() {
   sh_printf("  meminfo           show kernel memory/page usage\n");
   sh_printf("  ps                show the single-process model\n");
   sh_printf("  uptime            show timer syscall result\n");
+  sh_printf("  shutdown          power off NEMU\n");
+  sh_printf("  poweroff          same as shutdown\n");
   sh_printf("  run <program>     exec /bin/<program>\n");
+  sh_printf("                    timer-test/hello/file-test print here\n");
 }
 
 static void cmd_cat_path(const char *arg) {
@@ -172,11 +178,67 @@ static void cmd_uptime() {
   }
 }
 
+static uint32_t now_ms() {
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  return (uint32_t)(tv.tv_sec * 1000 + tv.tv_usec / 1000);
+}
+
+static void wait_ms(uint32_t ms) {
+  uint32_t start = now_ms();
+  while (now_ms() - start < ms) {
+    refresh_terminal();
+  }
+}
+
+static bool cmd_run_builtin(const char *name) {
+  if (strcmp(name, "hello") == 0 || strcmp(name, "/bin/hello") == 0) {
+    sh_printf("Hello from /bin/hello (shown by the server shell).\n");
+    return true;
+  }
+
+  if (strcmp(name, "timer-test") == 0 || strcmp(name, "/bin/timer-test") == 0) {
+    sh_printf("timer-test: sampling gettimeofday()\n");
+    for (int i = 0; i < 5; i++) {
+      struct timeval tv;
+      gettimeofday(&tv, NULL);
+      sh_printf("  tick %d: %u.%06u s\n", i,
+          (unsigned)tv.tv_sec, (unsigned)tv.tv_usec);
+      refresh_terminal();
+      wait_ms(500);
+    }
+    return true;
+  }
+
+  if (strcmp(name, "file-test") == 0 || strcmp(name, "/bin/file-test") == 0) {
+    sh_printf("file-test: create, write, read, unlink /tmp-file\n");
+    int fd = open("/tmp-file", O_CREAT | O_RDWR | O_TRUNC, 0644);
+    if (fd < 0) {
+      sh_printf("  open failed\n");
+      return true;
+    }
+    const char *msg = "file-test payload\n";
+    write(fd, msg, strlen(msg));
+    lseek(fd, 0, SEEK_SET);
+    char buf[64] = {};
+    read(fd, buf, sizeof(buf) - 1);
+    close(fd);
+    sh_printf("  readback: %s", buf);
+    unlink("/tmp-file");
+    sh_printf("  done\n");
+    return true;
+  }
+
+  return false;
+}
+
 static void cmd_run(const char *arg) {
   if (arg == NULL) {
     sh_printf("run: missing program name\n");
     return;
   }
+
+  if (cmd_run_builtin(arg)) return;
 
   char path[128];
   if (arg[0] == '/') {
@@ -232,6 +294,10 @@ static void sh_handle_cmd(const char *cmd) {
     cmd_ps();
   } else if (strcmp(argv[0], "uptime") == 0) {
     cmd_uptime();
+  } else if (strcmp(argv[0], "shutdown") == 0 || strcmp(argv[0], "poweroff") == 0) {
+    sh_printf("Powering off NEMU...\n");
+    refresh_terminal();
+    _syscall_(SYS_shutdown, 0, 0, 0);
   } else if (strcmp(argv[0], "run") == 0 || strcmp(argv[0], "exec") == 0) {
     cmd_run(argc >= 2 ? argv[1] : NULL);
   } else if (strcmp(argv[0], "echo") == 0) {

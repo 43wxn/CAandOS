@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 #define keyname(k) #k,
 
@@ -56,6 +57,11 @@ int SDL_PollEvent(SDL_Event *ev) {
 
   int is_keydown = (strcmp(type, "kd") == 0);
   key_state[code] = is_keydown ? 1 : 0;
+
+  if (is_keydown && code == SDLK_C &&
+      (key_state[SDLK_LCTRL] || key_state[SDLK_RCTRL])) {
+    exit(130);
+  }
 
   if (ev) {
     memset(ev, 0, sizeof(*ev));

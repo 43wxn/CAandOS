@@ -21,5 +21,6 @@
 #define SYS_wait           17
 #define SYS_times          18
 #define SYS_gettimeofday   19
+#define SYS_shutdown       20
 
 #endif
