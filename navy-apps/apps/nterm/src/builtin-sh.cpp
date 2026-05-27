@@ -98,9 +98,73 @@ static void cmd_cat_path(const char *arg) {
   close(fd);
 }
 
+static bool file_exists(const char *path) {
+  int fd = open(path, O_RDONLY);
+  if (fd < 0) return false;
+  close(fd);
+  return true;
+}
+
+static void list_proc_prefix(const char *dir) {
+  int fd = open("/proc/files", O_RDONLY);
+  if (fd < 0) return;
+
+  char data[2048];
+  int n = read(fd, data, sizeof(data) - 1);
+  close(fd);
+  if (n <= 0) return;
+  data[n] = '\0';
+
+  size_t dir_len = strlen(dir);
+  char *line = strtok(data, "\n");
+  while (line != NULL) {
+    char type[16] = {};
+    unsigned size = 0;
+    char path[128] = {};
+    if (sscanf(line, "%15s %u %127s", type, &size, path) == 3) {
+      if (strcmp(dir, "/") == 0) {
+        const char *name = path[0] == '/' ? path + 1 : path;
+        if (strchr(name, '/') == NULL && strcmp(type, "ramfs") == 0) {
+          sh_printf("%s  ", name);
+        }
+      } else if (strncmp(path, dir, dir_len) == 0 && path[dir_len] == '/') {
+        const char *name = path + dir_len + 1;
+        if (*name != '\0' && strchr(name, '/') == NULL) {
+          sh_printf("%s  ", name);
+        }
+      }
+    }
+    line = strtok(NULL, "\n");
+  }
+}
+
 static void cmd_ls(const char *arg) {
-  (void)arg;
-  cmd_cat_path("/proc/files");
+  char path[128];
+  make_path(arg == NULL ? "/" : arg, path, sizeof(path));
+
+  if (strcmp(path, "/") == 0) {
+    sh_printf("bin/  dev/  proc/  share/  home/  etc/  ");
+    list_proc_prefix("/");
+    sh_printf("\n");
+  } else if (strcmp(path, "/bin") == 0) {
+    const char *bins[] = {
+      "nterm", "bird", "pal", "hello", "timer-test",
+      "file-test", "event-test", "dummy", NULL
+    };
+    for (int i = 0; bins[i] != NULL; i++) {
+      char full[128];
+      snprintf(full, sizeof(full), "/bin/%s", bins[i]);
+      if (file_exists(full)) sh_printf("%s  ", bins[i]);
+    }
+    sh_printf("\n");
+  } else if (strcmp(path, "/dev") == 0) {
+    sh_printf("events  fb  sb  sbctl\n");
+  } else if (strcmp(path, "/proc") == 0) {
+    sh_printf("dispinfo  files  meminfo\n");
+  } else {
+    list_proc_prefix(path);
+    sh_printf("\n");
+  }
 }
 
 static void cmd_touch(const char *arg) {

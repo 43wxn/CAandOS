@@ -1,21 +1,35 @@
 # Nanos-lite Server Demo on riscv32-NEMU
 
-本项目用于《操作系统课程设计》的 A 方案：OS 内核实现。当前路线是在自研/自改的 `riscv32-nemu` 上运行 `nanos-lite`，并把 `nterm` 改造成类似 Ubuntu Server 登录后的命令行环境。
+本项目用于《操作系统课程设计》A 方案：OS 内核实现。路线是在 `riscv32-nemu` 上运行 `nanos-lite`，并把 `/bin/nterm` 改造成类似 Ubuntu Server 登录后的命令行环境。
 
-## 项目定位
+## 重要定位
 
-我们采用单进程演示模型：
+当前系统不是完整 Ubuntu，也不是 Linux。
 
-- `NEMU` 是底层 RISC-V32 全系统模拟器。
-- `nanos-lite` 是内核，负责启动、设备初始化、系统调用、ELF 加载、ramdisk 文件系统、运行时 RAMFS、`/proc` 信息等。
-- `/bin/nterm` 是第一个用户程序，类似 `init + shell`。它提供 `root@nanos-lite:/#` 命令行。
-- `run pal`、`run bird` 这类图形程序会通过 `execve` 替换当前 `nterm`。程序退出后，内核重新加载 `/bin/nterm` 回到命令行。
+真实 Ubuntu 的链路是：Bootloader 加载 Linux kernel，kernel 挂载磁盘根文件系统，启动 `systemd/init`，再进入登录程序和 shell。Ubuntu 的 `/` 是磁盘分区或镜像中的真实文件系统。
 
-这不是完整 Linux，也不是多进程 Ubuntu。更准确的类比是：我们实现了一个教学 OS 内核和一个 server shell，能够展示启动、系统调用、文件系统、设备、用户程序加载和内存信息。
+本项目的链路是：NEMU 加载 `nanos-lite` 镜像，`nanos-lite` 初始化设备和 ramdisk，然后直接加载 `/bin/nterm`。这里的 `/bin/nterm` 类似一个简化版 `init + shell`。根目录来自构建时打包进内核镜像的 ramdisk，不是运行时实时挂载宿主机目录。
 
-## 当前演示命令
+我们新增了根目录源：
 
-启动：
+```text
+os-root/
+```
+
+你可以把想放进 OS 的演示文件放在这里，例如：
+
+```text
+os-root/home/welcome.txt
+os-root/etc/motd
+```
+
+执行 `make ARCH=riscv32-nemu update` 时，`os-root/` 会被复制到 `navy-apps/fsimg/`，再打包进 `ramdisk.img`，最后嵌进 `nanos-lite` 镜像。修改 `os-root/` 后必须重新 `update`，运行中的 OS 不会自动看到宿主机新文件。
+
+如果将来要做到“运行时直接访问宿主机目录”，需要实现 hostfs、磁盘文件系统或 virtio/SD 卡一类设备，这属于扩展目标。
+
+## 启动与调试链路
+
+如果改了 `navy-apps`、`nterm`、`libos`、`libndl`、`libminiSDL`、`os-root` 或默认打包应用：
 
 ```bash
 cd ~/ics2025/nanos-lite
@@ -23,12 +37,42 @@ make ARCH=riscv32-nemu update
 make ARCH=riscv32-nemu run
 ```
 
-进入图形命令行后可输入：
+如果只改了 `nanos-lite/src/*.c`：
+
+```bash
+cd ~/ics2025/nanos-lite
+make ARCH=riscv32-nemu run
+```
+
+`make run` 不会自动重新编译并打包 `navy-apps`。`make update` 才会重新生成 ramdisk。
+
+当前默认打包应用在 `navy-apps/Makefile`：
+
+```make
+APPS = nterm bird pal
+TESTS = hello timer-test file-test event-test dummy
+```
+
+## 启动到命令行的代码链路
+
+- `nanos-lite/src/main.c`：初始化内存、设备、ramdisk、IRQ、文件系统和进程模块。
+- `nanos-lite/src/proc.c`：`init_proc()` 中加载 `/bin/nterm`。
+- `nanos-lite/src/loader.c`：解析 ELF 并跳转到用户程序入口。
+- `nanos-lite/src/resources.S`：通过 `.incbin "build/ramdisk.img"` 把文件系统镜像嵌进内核。
+- `navy-apps/Makefile`：决定哪些应用和根目录文件进入 ramdisk。
+- `navy-apps/apps/nterm/src/builtin-sh.cpp`：server shell 命令实现。
+
+## 当前命令
+
+进入 `root@nanos-lite:/#` 后可演示：
 
 ```text
 help
 pwd
 ls
+ls /bin
+ls /home
+cat /home/welcome.txt
 meminfo
 touch note.txt
 write note.txt hello nanos-lite
@@ -43,140 +87,125 @@ run pal
 shutdown
 ```
 
-`Ctrl-C`：在 `pal/bird` 等 SDL 应用中按 `Ctrl-C`，应用会 `exit(130)`，内核随后重新加载 `/bin/nterm` 回到 shell。
+`Ctrl-C`：在 `pal/bird` 等 SDL 图形应用里按 `Ctrl-C`，应用会退出，内核重新加载 `/bin/nterm` 返回 shell。
 
-`shutdown` / `poweroff`：调用内核 `SYS_shutdown`，让 NEMU 触发 `halt(0)` 退出。
-
-## run 和 update 的区别
-
-`make ARCH=riscv32-nemu run` 不会主动重新编译 `navy-apps`。
-
-如果改了这些内容，需要先 `update`：
-
-- `navy-apps/apps/nterm`
-- `navy-apps/libs/libos`
-- `navy-apps/libs/libndl`
-- `navy-apps/libs/libminiSDL`
-- `navy-apps/Makefile` 里的 `APPS` / `TESTS`
-
-推荐链路：
-
-```bash
-cd ~/ics2025/nanos-lite
-make ARCH=riscv32-nemu update
-make ARCH=riscv32-nemu run
-```
-
-如果只改了 `nanos-lite/src/*.c`，可以直接：
-
-```bash
-cd ~/ics2025/nanos-lite
-make ARCH=riscv32-nemu run
-```
-
-## 为什么能开机进入命令行
-
-关键代码链路：
-
-- `nanos-lite/src/main.c`：初始化内存、设备、ramdisk、IRQ、文件系统和进程模块。
-- `nanos-lite/src/proc.c`：`init_proc()` 中写死加载 `/bin/nterm`。
-- `nanos-lite/src/loader.c`：解析 ELF，把 `/bin/nterm` 加载到内存并跳转入口。
-- `nanos-lite/src/resources.S`：把 `build/ramdisk.img` 用 `.incbin` 嵌入内核镜像。
-- `navy-apps/Makefile`：决定哪些应用被安装进 `fsimg/bin` 并打包进 ramdisk。
-- `navy-apps/apps/nterm/src/builtin-sh.cpp`：server shell 的命令实现。
-
-## 默认打包程序
-
-当前 `navy-apps/Makefile` 中默认：
-
-```make
-APPS = nterm bird
-TESTS = hello timer-test file-test event-test dummy
-```
-
-如果要把 PAL 放进新 ramdisk：
-
-```make
-APPS = nterm bird pal
-```
-
-然后运行：
-
-```bash
-cd ~/ics2025/nanos-lite
-make ARCH=riscv32-nemu update
-make ARCH=riscv32-nemu run
-```
-
-进入 shell 后：
-
-```text
-run pal
-```
-
-注意：PAL 需要对应游戏资源文件；如果 `fsimg/share/games/pal` 资源不存在，程序可能无法完整进入游戏。PAL 也比较重，适合作为 bonus，不建议作为主线唯一演示。
+`shutdown` / `poweroff`：调用内核关机系统调用，触发 NEMU 退出。
 
 ## 输出位置说明
 
-`nterm` 自己的内建命令输出在图形命令行中。
+`nterm` 的内建命令输出在图形命令行里。
 
-真正 `execve` 的外部 CLI 程序会替换 `nterm`，它们的 `stdout` 仍然是内核串口，所以可能输出到宿主机终端。为保证演示效果，`run timer-test`、`run hello`、`run file-test` 在 shell 中做了内建演示版，输出留在图形命令行里；`run pal`、`run bird` 仍然启动真实图形应用。
+真正 `execve` 的外部 CLI 程序会替换 `nterm`，它们的 `stdout` 仍然是内核串口，可能输出到宿主机终端。为保证演示效果，`run timer-test`、`run hello`、`run file-test` 做成了 shell 内建演示版，输出留在图形命令行中。`run pal`、`run bird` 仍然启动真实图形应用。
 
-## 三人分工
+## 六模块分工
 
-### 成员 A：整体框架与内核主线
+课程设计方案给了 6 个技术模块。我们按这 6 个模块组织三人工作，便于体现工作量。
 
-当前框架已经由成员 A 搭起。后续负责把项目主线稳定住：
+### 成员 A：系统启动 + 中断异常 + 项目主线整合
 
-- 维护 `nanos-lite` 启动链路：`main -> init_proc -> naive_uload("/bin/nterm")`。
-- 维护系统调用：`open/read/write/lseek/fstat/gettimeofday/execve/unlink/shutdown`。
-- 维护运行时 RAMFS、`/proc/files`、`/proc/meminfo`。
-- 维护演示脚本，保证 `make update && make run` 能复现。
-- 答辩中负责讲清楚“单进程 server shell 模型”和“为什么不是完整 Linux”。
+已完成基础框架，后续继续负责主线稳定性。
 
-最终效果：系统能稳定启动到 `root@nanos-lite:/#`，支持创建/读写/删除文件、查看内存、运行图形应用、Ctrl-C 返回 shell、关机退出。
+对应模块：
 
-### 成员 B：Shell 与用户体验完善
+- 模块 1：系统启动
+- 模块 2：中断与异常处理
 
-在现有 `nterm` 上继续完善交互体验：
+目标效果：
 
-- 优化命令行显示、滚屏、提示符和错误提示。
-- 增加更多内建命令，例如 `date`、`free`、`hexdump`、`clear`、`history`。
-- 把适合演示的 CLI 程序做成 shell 内建演示版，保证输出在图形命令行中。
-- 整理 `help` 输出，让老师现场能直接看到功能点。
+- NEMU 能稳定加载 `nanos-lite-riscv32-nemu.bin`。
+- 内核完成 `init_mm/init_device/init_ramdisk/init_irq/init_fs/init_proc`。
+- `init_proc()` 自动加载 `/bin/nterm` 进入 `root@nanos-lite:/#`。
+- `ecall` 能进入内核系统调用分发。
+- `shutdown/poweroff` 能触发 NEMU 正常退出。
+- `Ctrl-C` 能让 SDL 应用退出并回到 shell。
 
-最终效果：命令行像简化版 Ubuntu Server，输入不存在命令不会退出，常见命令都有稳定反馈。
+建议继续完善：
 
-### 成员 C：应用、性能与展示材料
+- 整理启动日志，形成清晰 boot trace。
+- 给异常路径增加错误提示，例如非法 syscall、ELF 加载失败。
+- 在答辩中讲清楚 NEMU、AM、nanos-lite、navy-apps 的层次关系。
 
-负责让演示更顺滑、更好看：
+### 成员 B：内存管理 + 文件系统
 
-- 维护 `navy-apps/Makefile` 默认打包集合，区分主线应用和 bonus 应用。
-- 验证 `run pal`、`run bird`、`run timer-test`、`run file-test`。
-- 优化图形刷新、减少无意义调试输出、缩小 ramdisk。
-- 准备 PPT、视频、功能点矩阵和演示录屏。
+对应模块：
 
-最终效果：主线演示不卡死，PAL/Bird 可作为图形应用亮点，报告中能对应课程设计的启动、系统调用、文件系统、用户程序加载、设备管理等模块。
+- 模块 3：内存管理
+- 模块 5：文件系统
+
+目标效果：
+
+- `new_page()` 提供页级分配。
+- `/proc/meminfo` 展示 `MemTotal/MemUsed/MemFree/PageSize/RamfsCap`。
+- 运行时 RAMFS 支持 `touch/write/append/cat/rm`。
+- `os-root/` 作为宿主机根目录源，`make update` 时被打包进 OS。
+- `ls /`、`ls /bin`、`ls /home`、`cat /home/welcome.txt` 展示更像真实系统的目录结构。
+
+建议继续完善：
+
+- 给 RAMFS 增加目录层级解析和更规范的 `stat` 信息。
+- 增加 `mkdir/rmdir`。
+- 增加 `/proc/cpuinfo`、`/proc/uptime`。
+- 给 `meminfo` 做页数统计，而不仅是字节统计。
+
+### 成员 C：用户程序加载 + Shell/应用演示
+
+对应模块：
+
+- 模块 4：进程管理的单进程版本
+- 模块 6：用户程序加载与执行
+
+目标效果：
+
+- `loader.c` 能加载 ELF 用户程序。
+- `run pal`、`run bird` 能启动图形应用。
+- `run timer-test`、`run file-test`、`run hello` 在图形 shell 中有稳定演示输出。
+- 未知命令只报错，不会退出 shell。
+- `help` 给出完整命令列表。
+- 图形应用尺寸尽量匹配 NEMU 窗口。
+
+建议继续完善：
+
+- 给 shell 增加 `history`、`date`、`free`、`hexdump`、`clear`。
+- 给外部程序设计“返回 shell”的统一机制。
+- 录制 PAL/Bird 演示视频，防止现场机器性能波动。
+- 如果时间允许，补一个简化 PCB 状态表，让 `ps` 更像真实 OS。
+
+## 六模块功能点对照
+
+| 课程模块 | 当前可展示内容 | 后续增强 |
+|---|---|---|
+| 系统启动 | NEMU 启动 nanos-lite，自动进入 nterm | boot trace 文档化 |
+| 中断与异常 | `ecall` 系统调用，Ctrl-C 退出应用，shutdown | 更完整异常处理 |
+| 内存管理 | 页分配器，`/proc/meminfo` | 页回收、堆统计 |
+| 进程管理 | 单进程 exec 模型，`ps` 说明当前模型 | 简化 PCB/状态表 |
+| 文件系统 | ramdisk + RAMFS + `/proc` + `os-root` | 目录创建、路径解析增强 |
+| 用户程序 | ELF loader，nterm、pal、bird、测试程序 | argv/envp、更多命令 |
 
 ## 推荐验收演示顺序
 
-1. 展示启动日志，说明 NEMU 加载 `nanos-lite`。
-2. 进入 `root@nanos-lite:/#`。
-3. 输入 `help` 展示命令列表。
-4. 输入 `ls` 展示 ramdisk、设备文件、proc 文件。
-5. 输入 `meminfo` 展示页分配和内存统计。
-6. 输入 `touch/write/cat/append/rm` 展示运行时 RAMFS。
-7. 输入 `run timer-test` 展示定时器系统调用。
-8. 输入 `run pal` 或 `run bird` 展示图形应用。
-9. 在图形应用中按 `Ctrl-C` 回到 shell。
-10. 输入 `shutdown` 退出 NEMU。
+1. `make ARCH=riscv32-nemu update`
+2. `make ARCH=riscv32-nemu run`
+3. 进入 `root@nanos-lite:/#`
+4. `help`
+5. `ls`
+6. `ls /home`
+7. `cat /home/welcome.txt`
+8. `meminfo`
+9. `write note.txt hello os`
+10. `cat note.txt`
+11. `run timer-test`
+12. `run pal`
+13. 在 PAL 中按 `Ctrl-C` 回到 shell
+14. `shutdown`
 
 ## 常见问题
 
-`run` 后没有重新编译应用：先执行 `make ARCH=riscv32-nemu update`。
+`ls` 以前看到很多奇怪文件：那是直接展示 ramdisk 全量文件表，包括字体、图片、游戏资源。现在 `ls` 默认展示根目录视角，`/proc/files` 仍保留给调试。
 
-PAL 没启动：确认 `APPS` 包含 `pal`，确认 PAL 资源文件存在，然后重新 `update`。
+`Ctrl-C` 没反应：确认运行的是重新 `update` 后的镜像；Ctrl-C 要在 NEMU 图形窗口获得焦点时按。
 
-输出跑到宿主机终端：这是外部 CLI 程序通过串口 stdout 输出。演示时优先使用 shell 内建命令或已适配的 `run timer-test`。
+图形应用尺寸不匹配：miniSDL/NDL 已做全屏 canvas 和最近邻缩放，改动后需要重新 `make update`。
 
-运行卡顿：默认不要把 PAL/NPlayer/FCEUX 全部打进主线演示；优先演示轻量命令和 `bird`。PAL 作为 bonus。
+PAL 没启动：确认 `APPS` 包含 `pal`，确认 `navy-apps/apps/pal/repo/data` 存在，然后重新 `make update`。
+
+宿主机目录能不能当根目录：可以把 `os-root/` 当作构建时根目录源；不能在当前系统里实时挂载宿主机目录。实时挂载属于后续 hostfs/磁盘文件系统扩展。

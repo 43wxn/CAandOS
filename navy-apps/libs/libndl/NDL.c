@@ -27,6 +27,20 @@ int NDL_PollEvent(char *buf, int len) {
   if (evtdev < 0) return 0;
   int n = read(evtdev, buf, len);
   if (n <= 0) return 0;
+
+  if (n < len) buf[n] = '\0';
+  static int ctrl_down = 0;
+  char type[8] = {};
+  char key[32] = {};
+  if (sscanf(buf, "%7s %31s", type, key) == 2) {
+    int is_down = strcmp(type, "kd") == 0;
+    if (strcmp(key, "LCTRL") == 0 || strcmp(key, "RCTRL") == 0) {
+      ctrl_down = is_down;
+    } else if (is_down && ctrl_down && strcmp(key, "C") == 0) {
+      exit(130);
+    }
+  }
+
   return n;
 }
 
@@ -47,8 +61,10 @@ void NDL_OpenCanvas(int *w, int *h) {
     if (w) *w = canvas_w;
     if (h) *h = canvas_h;
   } else {
-    canvas_w = *w;
-    canvas_h = *h;
+    canvas_w = screen_w;
+    canvas_h = screen_h;
+    *w = canvas_w;
+    *h = canvas_h;
   }
 
   canvas_x = (screen_w - canvas_w) / 2;

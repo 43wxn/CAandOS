@@ -198,7 +198,6 @@ SDL_Surface* SDL_SetVideoMode(int width, int height, int bpp, uint32_t flags) {
 void SDL_SoftStretch(SDL_Surface *src, SDL_Rect *srcrect, SDL_Surface *dst, SDL_Rect *dstrect) {
   assert(src && dst);
   assert(dst->format->BitsPerPixel == src->format->BitsPerPixel);
-  assert(dst->format->BitsPerPixel == 8);
 
   int x = (srcrect == NULL ? 0 : srcrect->x);
   int y = (srcrect == NULL ? 0 : srcrect->y);
@@ -206,16 +205,29 @@ void SDL_SoftStretch(SDL_Surface *src, SDL_Rect *srcrect, SDL_Surface *dst, SDL_
   int h = (srcrect == NULL ? src->h : srcrect->h);
 
   assert(dstrect);
-  if(w == dstrect->w && h == dstrect->h) {
+  if (w == dstrect->w && h == dstrect->h) {
     SDL_Rect rect;
     rect.x = x;
     rect.y = y;
     rect.w = w;
     rect.h = h;
     SDL_BlitSurface(src, &rect, dst, dstrect);
+    return;
   }
-  else {
-    sdl_video_unsupported("SDL_SoftStretch(non-identity)");
+
+  assert(w > 0 && h > 0 && dstrect->w > 0 && dstrect->h > 0);
+  int bpp = src->format->BytesPerPixel;
+  assert(bpp == 1 || bpp == 4);
+
+  for (int dy = 0; dy < dstrect->h; dy++) {
+    int sy = y + dy * h / dstrect->h;
+    uint8_t *drow = (uint8_t *)dst->pixels + (dstrect->y + dy) * dst->pitch + dstrect->x * bpp;
+    uint8_t *sbase = (uint8_t *)src->pixels + sy * src->pitch;
+
+    for (int dx = 0; dx < dstrect->w; dx++) {
+      int sx = x + dx * w / dstrect->w;
+      memcpy(drow + dx * bpp, sbase + sx * bpp, bpp);
+    }
   }
 }
 

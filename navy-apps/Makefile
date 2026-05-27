@@ -177,9 +177,17 @@ $(CLEAN_ALL):
 .PHONY: clean-all $(CLEAN_ALL)
 
 ### Build fsimg and ramdisk for Nanos-lite
-APPS = nterm bird
+OS_ROOT ?= $(NAVY_HOME)/../os-root
+APPS = nterm bird pal
 TESTS = hello timer-test file-test event-test dummy
 
+prepare-fsimg:
+	@mkdir -p $(NAVY_HOME)/fsimg/bin $(NAVY_HOME)/fsimg/share/games
+	@rm -rf $(NAVY_HOME)/fsimg/bin/* $(NAVY_HOME)/fsimg/home $(NAVY_HOME)/fsimg/etc $(NAVY_HOME)/fsimg/README.txt
+	@rm -rf $(NAVY_HOME)/fsimg/share/games/bird $(NAVY_HOME)/fsimg/share/games/pal
+	@if [ -d "$(OS_ROOT)" ]; then cp -a $(OS_ROOT)/. $(NAVY_HOME)/fsimg/; fi
+
+fsimg: | prepare-fsimg
 fsimg: $(addprefix apps/, $(APPS)) $(addprefix tests/, $(TESTS))
 	-for t in $^; do $(MAKE) -s -C $(NAVY_HOME)/$$t install; done
 
@@ -195,4 +203,4 @@ $(RAMDISK): fsimg
 
 ramdisk: $(RAMDISK)
 
-.PHONY: fsimg ramdisk
+.PHONY: prepare-fsimg fsimg ramdisk
