@@ -4,7 +4,7 @@
 #include <nwm.h>
 #include <string.h>
 
-static const char *nterm_argv[] = { "/bin/nterm", NULL };
+static const char *dterm_argv[] = { "/bin/dterm", NULL };
 static const char *nslider_argv[] = { "/bin/nslider", NULL };
 static const char *fceux_argv[] = { "/bin/fceux", NULL };
 static const char *pal_argv[] = { "/bin/pal", NULL };
@@ -17,7 +17,7 @@ static const struct {
   const char *bin;
   const char *const *argv;
 } default_apps [] = {
-  { "Terminal", nterm_argv[0], nterm_argv },
+  { "DTerm", dterm_argv[0], dterm_argv },
   { "NSlider", nslider_argv[0], nslider_argv },
   { "Typing Game", typing_argv[0], typing_argv },
   { "FCEUX", fceux_argv[0], fceux_argv },

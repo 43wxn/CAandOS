@@ -10,6 +10,8 @@ It is a two-tasking operating system with the following features
   * with fix number and size of files
   * without directory
   * some device files
-* 9 system calls
-  * open, read, write, lseek, close, gettimeofday, brk, exit, execve
-* scheduler with two tasks
+* 21 syscall entries in `syscall.h`
+  * implemented: exit, yield, open, read, write, getpid, close, lseek, brk,
+    fstat, time, execve, unlink, times, gettimeofday, shutdown
+  * reserved for future process/thread work: kill, signal, fork, link, wait
+* single-process scheduler model with future PCB/thread interfaces reserved

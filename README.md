@@ -1,6 +1,6 @@
 # Nanos-lite Server Demo on riscv32-NEMU
 
-本项目用于《操作系统课程设计》A 方案：OS 内核实现。路线是在 `riscv32-nemu` 上运行 `nanos-lite`，并把 `/bin/nterm` 改造成类似 Ubuntu Server 登录后的命令行环境。
+本项目用于《操作系统课程设计》A 方案：OS 内核实现。路线是在 `riscv32-nemu` 上运行 `nanos-lite`，并把 `/bin/dterm` 改造成类似 Ubuntu Server 登录后的命令行环境。
 
 ## 重要定位
 
@@ -8,7 +8,7 @@
 
 真实 Ubuntu 的链路是：Bootloader 加载 Linux kernel，kernel 挂载磁盘根文件系统，启动 `systemd/init`，再进入登录程序和 shell。Ubuntu 的 `/` 是磁盘分区或镜像中的真实文件系统。
 
-本项目的链路是：NEMU 加载 `nanos-lite` 镜像，`nanos-lite` 初始化设备和 ramdisk，然后直接加载 `/bin/nterm`。这里的 `/bin/nterm` 类似一个简化版 `init + shell`。根目录来自构建时打包进内核镜像的 ramdisk，不是运行时实时挂载宿主机目录。
+本项目的链路是：NEMU 加载 `nanos-lite` 镜像，`nanos-lite` 初始化设备和 ramdisk，然后直接加载 `/bin/dterm`。这里的 `/bin/dterm` 类似一个简化版 `init + shell`。根目录来自构建时打包进内核镜像的 ramdisk，不是运行时实时挂载宿主机目录。
 
 我们新增了根目录源：
 
@@ -29,7 +29,7 @@ os-root/etc/motd
 
 ## 启动与调试链路
 
-如果改了 `navy-apps`、`nterm`、`libos`、`libndl`、`libminiSDL`、`os-root` 或默认打包应用：
+如果改了 `navy-apps`、`dterm`、`libos`、`libndl`、`libminiSDL`、`os-root` 或默认打包应用：
 
 ```bash
 cd ~/ics2025/nanos-lite
@@ -53,14 +53,16 @@ APPS = nterm bird pal
 TESTS = hello timer-test file-test event-test dummy
 ```
 
+说明：`APPS = nterm` 这里指源码目录 `navy-apps/apps/nterm`；该目录的 `Makefile` 中 `NAME = dterm`，所以最终安装进 OS 的二进制路径是 `/bin/dterm`。
+
 ## 启动到命令行的代码链路
 
 - `nanos-lite/src/main.c`：初始化内存、设备、ramdisk、IRQ、文件系统和进程模块。
-- `nanos-lite/src/proc.c`：`init_proc()` 中加载 `/bin/nterm`。
+- `nanos-lite/src/proc.c`：`init_proc()` 中加载 `/bin/dterm`。
 - `nanos-lite/src/loader.c`：解析 ELF 并跳转到用户程序入口。
 - `nanos-lite/src/resources.S`：通过 `.incbin "build/ramdisk.img"` 把文件系统镜像嵌进内核。
 - `navy-apps/Makefile`：决定哪些应用和根目录文件进入 ramdisk。
-- `navy-apps/apps/nterm/src/builtin-sh.cpp`：server shell 命令实现。
+- `navy-apps/apps/nterm/src/builtin-sh.cpp`：DTerm server shell 命令实现。
 
 ## 当前命令
 
@@ -87,15 +89,15 @@ run pal
 shutdown
 ```
 
-`Ctrl-C`：在 `pal/bird` 等 SDL 图形应用里按 `Ctrl-C`，应用会退出，内核重新加载 `/bin/nterm` 返回 shell。
+`Ctrl-C`：在 `pal/bird` 等 SDL 图形应用里按 `Ctrl-C`，应用会退出，内核重新加载 `/bin/dterm` 返回 shell。
 
 `shutdown` / `poweroff`：调用内核关机系统调用，触发 NEMU 退出。
 
 ## 输出位置说明
 
-`nterm` 的内建命令输出在图形命令行里。
+`dterm` 的内建命令输出在图形命令行里。
 
-真正 `execve` 的外部 CLI 程序会替换 `nterm`，它们的 `stdout` 仍然是内核串口，可能输出到宿主机终端。为保证演示效果，`run timer-test`、`run hello`、`run file-test` 做成了 shell 内建演示版，输出留在图形命令行中。`run pal`、`run bird` 仍然启动真实图形应用。
+真正 `execve` 的外部 CLI 程序会替换 `dterm`，它们的 `stdout` 仍然是内核串口，可能输出到宿主机终端。为保证演示效果，`run timer-test`、`run hello`、`run file-test` 做成了 shell 内建演示版，输出留在图形命令行中。`run pal`、`run bird` 仍然启动真实图形应用。
 
 ## 六模块分工
 
@@ -114,7 +116,7 @@ shutdown
 
 - NEMU 能稳定加载 `nanos-lite-riscv32-nemu.bin`。
 - 内核完成 `init_mm/init_device/init_ramdisk/init_irq/init_fs/init_proc`。
-- `init_proc()` 自动加载 `/bin/nterm` 进入 `root@nanos-lite:/#`。
+- `init_proc()` 自动加载 `/bin/dterm` 进入 `root@nanos-lite:/#`。
 - `ecall` 能进入内核系统调用分发。
 - `shutdown/poweroff` 能触发 NEMU 正常退出。
 - `Ctrl-C` 能让 SDL 应用退出并回到 shell。
@@ -174,12 +176,12 @@ shutdown
 
 | 课程模块 | 当前可展示内容 | 后续增强 |
 |---|---|---|
-| 系统启动 | NEMU 启动 nanos-lite，自动进入 nterm | boot trace 文档化 |
+| 系统启动 | NEMU 启动 nanos-lite，自动进入 dterm | boot trace 文档化 |
 | 中断与异常 | `ecall` 系统调用，Ctrl-C 退出应用，shutdown | 更完整异常处理 |
 | 内存管理 | 页分配器，`/proc/meminfo` | 页回收、堆统计 |
 | 进程管理 | 单进程 exec 模型，`ps` 说明当前模型 | 简化 PCB/状态表 |
 | 文件系统 | ramdisk + RAMFS + `/proc` + `os-root` | 目录创建、路径解析增强 |
-| 用户程序 | ELF loader，nterm、pal、bird、测试程序 | argv/envp、更多命令 |
+| 用户程序 | ELF loader，dterm、pal、bird、测试程序 | argv/envp、更多命令 |
 
 ## 推荐验收演示顺序
 

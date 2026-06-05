@@ -1,6 +1,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#include <sys/times.h>
 #include <assert.h>
 #include <time.h>
 #include <string.h>
@@ -130,6 +131,12 @@ int _gettimeofday(struct timeval *tv, struct timezone *tz) {
   return 0;
 }
 
+time_t _time(time_t *t) {
+  time_t ret = (time_t)_syscall_(SYS_time, (intptr_t)t, 0, 0);
+  if (ret == (time_t)-1) errno = ENOSYS;
+  return ret;
+}
+
 int _execve(const char *fname, char * const argv[], char *const envp[]) {
   int ret = (int)_syscall_(SYS_execve, (intptr_t)fname, (intptr_t)argv, (intptr_t)envp);
   if (ret < 0) errno = ENOENT;
@@ -143,16 +150,19 @@ int _stat(const char *fname, struct stat *buf) {
 }
 
 int _kill(int pid, int sig) {
-  (void)pid; (void)sig;
-  errno = ENOSYS;
-  return -1;
+  int ret = (int)_syscall_(SYS_kill, pid, sig, 0);
+  if (ret < 0) errno = ENOSYS;
+  return ret;
 }
 
-pid_t _getpid() { return 1; }
+pid_t _getpid() {
+  return (pid_t)_syscall_(SYS_getpid, 0, 0, 0);
+}
 
 pid_t _fork() {
-  errno = ENOSYS;
-  return -1;
+  pid_t ret = (pid_t)_syscall_(SYS_fork, 0, 0, 0);
+  if (ret < 0) errno = ENOSYS;
+  return ret;
 }
 
 pid_t vfork() {
@@ -161,9 +171,9 @@ pid_t vfork() {
 }
 
 int _link(const char *d, const char *n) {
-  (void)d; (void)n;
-  errno = ENOSYS;
-  return -1;
+  int ret = (int)_syscall_(SYS_link, (intptr_t)d, (intptr_t)n, 0);
+  if (ret < 0) errno = ENOSYS;
+  return ret;
 }
 
 int _unlink(const char *n) {
@@ -173,15 +183,15 @@ int _unlink(const char *n) {
 }
 
 pid_t _wait(int *status) {
-  (void)status;
-  errno = ENOSYS;
-  return -1;
+  pid_t ret = (pid_t)_syscall_(SYS_wait, (intptr_t)status, 0, 0);
+  if (ret < 0) errno = ENOSYS;
+  return ret;
 }
 
-clock_t _times(void *buf) {
-  (void)buf;
-  errno = ENOSYS;
-  return (clock_t)-1;
+clock_t _times(struct tms *buf) {
+  clock_t ret = (clock_t)_syscall_(SYS_times, (intptr_t)buf, 0, 0);
+  if (ret == (clock_t)-1) errno = ENOSYS;
+  return ret;
 }
 
 int pipe(int pipefd[2]) {

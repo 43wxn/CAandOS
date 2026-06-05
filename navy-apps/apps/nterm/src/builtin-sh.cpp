@@ -26,7 +26,7 @@ static void sh_printf(const char *format, ...) {
 
 static void sh_banner() {
   sh_printf("\033[2J\033[H");
-  sh_printf("Nanos-lite Server Shell on riscv32-nemu\n");
+  sh_printf("DTerm Server Shell on nanos-lite/riscv32-nemu\n");
   sh_printf("Type 'help' to list built-in commands.\n\n");
 }
 
@@ -148,7 +148,7 @@ static void cmd_ls(const char *arg) {
     sh_printf("\n");
   } else if (strcmp(path, "/bin") == 0) {
     const char *bins[] = {
-      "nterm", "bird", "pal", "hello", "timer-test",
+      "dterm", "bird", "pal", "hello", "timer-test",
       "file-test", "event-test", "dummy", NULL
     };
     for (int i = 0; bins[i] != NULL; i++) {
@@ -228,9 +228,9 @@ static void cmd_rm(const char *arg) {
 
 static void cmd_ps() {
   sh_printf("PID  PPID STATE    COMMAND\n");
-  sh_printf("1    0    running  /bin/nterm\n");
-  sh_printf("\nSingle-process demo: external programs replace nterm via execve,\n");
-  sh_printf("and nterm is loaded again after SYS_exit.\n");
+  sh_printf("1    0    running  /bin/dterm\n");
+  sh_printf("\nSingle-process demo: external programs replace dterm via execve,\n");
+  sh_printf("and dterm is loaded again after SYS_exit.\n");
 }
 
 static void cmd_uptime() {
