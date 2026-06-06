@@ -162,6 +162,9 @@ static void cmd_ls(const char *arg) {
     sh_printf("events  fb  sb  sbctl\n");
   } else if (strcmp(path, "/proc") == 0) {
     sh_printf("dispinfo  files  meminfo\n");
+  } else if (strcmp(path, "/home") == 0) {
+    if (file_exists("/home/welcome.txt")) sh_printf("welcome.txt  ");
+    sh_printf("\n");
   } else {
     list_proc_prefix(path);
     sh_printf("\n");
