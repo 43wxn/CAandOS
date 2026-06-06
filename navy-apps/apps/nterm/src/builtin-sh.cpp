@@ -385,12 +385,6 @@ void builtin_sh_run() {
     "cat /proc/meminfo",
     "ls /home",
     "cat /home/welcome.txt",
-    "touch note.txt",
-    "write note.txt hello os",
-    "append note.txt second line",
-    "cat note.txt",
-    "rm note.txt",
-    "cat note.txt",
     NULL,
   };
   for (int i = 0; demo_cmds[i] != NULL; i++) {
