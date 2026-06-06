@@ -9,6 +9,7 @@
 #include <sys/time.h>
 
 #define SYS_shutdown 20
+#define PROC_FILES_BUFSIZE (32 * 1024)
 
 char handle_key(SDL_Event *ev);
 extern "C" intptr_t _syscall_(intptr_t type, intptr_t a0, intptr_t a1, intptr_t a2);
@@ -109,7 +110,7 @@ static void list_proc_prefix(const char *dir) {
   int fd = open("/proc/files", O_RDONLY);
   if (fd < 0) return;
 
-  char data[2048];
+  static char data[PROC_FILES_BUFSIZE];
   int n = read(fd, data, sizeof(data) - 1);
   close(fd);
   if (n <= 0) return;

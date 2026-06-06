@@ -2,6 +2,7 @@
 #include <common.h>
 #include <sys/stat.h>
 #include <string.h>
+#include <stdarg.h>
 #include <am.h>
 #include <memory.h>
 
@@ -34,10 +35,11 @@
 #define FS_O_CREAT  0x0200
 #define FS_O_TRUNC  0x0400
 
-/* 运行期 ramfs 的简化限制：最多 32 个文件，每个最多 64 KiB。 */
-#define RAMFS_MAX_FILES 32
+/* 运行期 ramfs 的简化限制：最多 128 个文件，每个最多 64 KiB。 */
+#define RAMFS_MAX_FILES 128
 #define RAMFS_MAX_FILE_SIZE (64 * 1024)
 #define RAMFS_NAME_LEN 96
+#define PROC_FILES_BUFSIZE (32 * 1024)
 
 typedef size_t (*ReadFn)(void *buf, size_t offset, size_t len);
 typedef size_t (*WriteFn)(const void *buf, size_t offset, size_t len);
@@ -247,7 +249,7 @@ static size_t slice_read(const char *src, size_t total, void *buf,
 /*
  * fd 到 Finfo 的转换：
  *   0 ... NR_FILES-1              -> 静态 file_table[]
- *   NR_FILES ... NR_FILES+31      -> 运行期 ramfs[]
+ *   NR_FILES ... NR_FILES+RAMFS_MAX_FILES-1 -> 运行期 ramfs[]
  *
  * 可以把 fd 理解成“内核交给用户程序的一张取物牌”：
  *   用户程序不需要知道文件在 ramdisk 哪个偏移、设备该调用哪个函数；
@@ -342,6 +344,14 @@ static size_t ramfs_used_capacity(void) {
   return used;
 }
 
+static int ramfs_file_count(void) {
+  int count = 0;
+  for (int i = 0; i < RAMFS_MAX_FILES; i++) {
+    if (ramfs[i].name != NULL) count++;
+  }
+  return count;
+}
+
 /*
  * /proc/meminfo 不是磁盘文件，而是每次 read 时现场生成的文本。
  * shell 中 cat /proc/meminfo 看到的内存信息就来自这里。
@@ -356,11 +366,30 @@ static size_t proc_meminfo_read(void *buf, size_t offset, size_t len) {
       "MemUsed:  %u bytes\n"
       "MemFree:  %u bytes\n"
       "PageSize: %u bytes\n"
-      "RamfsCap: %u bytes\n",
+      "RamfsUsed: %u bytes\n"
+      "RamfsFiles: %u/%u\n"
+      "RamfsMaxFile: %u bytes\n",
       (unsigned)total, (unsigned)used, (unsigned)free,
-      (unsigned)PGSIZE, (unsigned)ramfs_used_capacity());
+      (unsigned)PGSIZE, (unsigned)ramfs_used_capacity(),
+      (unsigned)ramfs_file_count(), (unsigned)RAMFS_MAX_FILES,
+      (unsigned)RAMFS_MAX_FILE_SIZE);
 
   return slice_read(info, (size_t)n, buf, offset, len);
+}
+
+static size_t append_proc_line(char *buf, size_t cap, size_t pos,
+    const char *fmt, ...) {
+  if (pos >= cap) return cap;
+
+  va_list ap;
+  va_start(ap, fmt);
+  int n = vsnprintf(buf + pos, cap - pos, fmt, ap);
+  va_end(ap);
+
+  if (n <= 0) return pos;
+  size_t wrote = (size_t)n;
+  if (wrote >= cap - pos) return cap;
+  return pos + wrote;
 }
 
 /*
@@ -368,10 +397,10 @@ static size_t proc_meminfo_read(void *buf, size_t offset, size_t len) {
  * 静态 ramdisk 文件、设备文件、伪文件，以及运行期创建的 ramfs 文件。
  */
 static size_t proc_files_read(void *buf, size_t offset, size_t len) {
-  char info[2048];
+  static char info[PROC_FILES_BUFSIZE];
   size_t pos = 0;
 
-  pos += snprintf(info + pos, sizeof(info) - pos, "type     size    path\n");
+  pos = append_proc_line(info, sizeof(info), pos, "type     size    path\n");
   for (int i = 0; i < NR_FILES && pos < sizeof(info); i++) {
     const char *type = "file";
     if (i == FD_STDIN || i == FD_STDOUT || i == FD_STDERR ||
@@ -380,13 +409,13 @@ static size_t proc_files_read(void *buf, size_t offset, size_t len) {
     } else if (i == FD_DISPINFO || i == FD_MEMINFO || i == FD_FILES) {
       type = "proc";
     }
-    pos += snprintf(info + pos, sizeof(info) - pos, "%-7s %7u %s\n",
+    pos = append_proc_line(info, sizeof(info), pos, "%-7s %7u %s\n",
         type, (unsigned)file_table[i].size, file_table[i].name);
   }
 
   for (int i = 0; i < RAMFS_MAX_FILES && pos < sizeof(info); i++) {
     if (ramfs[i].name != NULL) {
-      pos += snprintf(info + pos, sizeof(info) - pos, "%-7s %7u %s\n",
+      pos = append_proc_line(info, sizeof(info), pos, "%-7s %7u %s\n",
           "ramfs", (unsigned)ramfs[i].size, ramfs[i].name);
     }
   }
@@ -716,6 +745,9 @@ int fs_unlink(const char *pathname) {
   if (f == NULL || !f->dynamic) return -1;
 
   int idx = fd - NR_FILES;
+  if (f->data != NULL) {
+    free_page(f->data);
+  }
   ramfs_names[idx][0] = '\0';
   ramfs[idx] = (Finfo) {0};
   return 0;
