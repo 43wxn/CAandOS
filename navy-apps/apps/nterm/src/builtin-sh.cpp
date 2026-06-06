@@ -378,6 +378,26 @@ static void sh_handle_cmd(const char *cmd) {
 
 void builtin_sh_run() {
   sh_banner();
+#ifdef DTERM_AUTODEMO_B
+  const char *demo_cmds[] = {
+    "meminfo",
+    "ls /proc",
+    "cat /proc/meminfo",
+    "ls /home",
+    "cat /home/welcome.txt",
+    "touch note.txt",
+    "write note.txt hello os",
+    "append note.txt second line",
+    "cat note.txt",
+    "rm note.txt",
+    "cat note.txt",
+    NULL,
+  };
+  for (int i = 0; demo_cmds[i] != NULL; i++) {
+    sh_printf("root@nanos-lite:/# %s\n", demo_cmds[i]);
+    sh_handle_cmd(demo_cmds[i]);
+  }
+#endif
   sh_prompt();
 
   while (1) {
