@@ -1,0 +1,230 @@
+% 编译建议：在 /home/wimiw/ics2025/ics2025 目录下使用 xelatex progress-report.tex
+\documentclass[UTF8,a4paper,zihao=-4]{ctexart}
+
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{xcolor}
+
+\geometry{left=2.6cm,right=2.6cm,top=2.5cm,bottom=2.5cm}
+\graphicspath{{./zhangyibo-DEMO演示/}{./member-B-DEMO/}}
+\hypersetup{colorlinks=true,linkcolor=black,urlcolor=blue}
+\captionsetup{font=small,labelfont=bf}
+\setlist[itemize]{leftmargin=2em,itemsep=0.2em,topsep=0.2em}
+\setlist[enumerate]{leftmargin=2em,itemsep=0.2em,topsep=0.2em}
+
+\title{\textbf{操作系统课程设计项目进度汇报}\\
+\large 基于 \texttt{riscv32-nemu} 的简化操作系统内核实现}
+\author{课程设计项目组}
+\date{2026年6月6日}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+本项目选择《操作系统课程设计》项目制题目 2026 中的 ``A、OS 内核实现'' 方案，
+以 \texttt{riscv32-nemu} 虚拟机、\texttt{nanos-lite} 内核和 \texttt{navy-apps}
+用户态程序环境为基础，构建一个可启动、可交互、可演示的简化操作系统。
+项目目标不是复现完整 Linux，而是在课程限定周期内覆盖系统启动、中断与系统调用、
+内存管理、文件系统、用户程序加载与执行等关键模块，形成从内核初始化到用户态
+shell 操作的闭环。目前，成员 A 负责的系统启动、中断、系统调用与主线集成任务已经完成；
+成员 B 负责的页式内存统计、RAMFS 文件系统和 \texttt{/proc} 信息展示已经完成；
+成员 C 负责的完整用户程序加载、shell 命令扩展和最终演示闭环属于下一阶段工作。
+\end{abstract}
+
+\noindent\textbf{关键词：} 操作系统课程设计；系统调用；RAMFS；内存管理；ELF 加载；NEMU
+
+\section{项目基础}
+
+课程题目要求通过实现简化版操作系统内核，理解系统启动、内存管理、进程调度、
+中断处理、文件系统等核心机制，并培养系统级编程和工程实践能力。根据题目文件，
+OS 内核实现方案的基本要求是至少完成 3 个模块、9 个功能点，并在第 14 周提交
+包含技术方案和分工方案的进度报告。
+
+本组选择的实现路线以已有教学基础设施为运行平台：底层使用 \texttt{riscv32-nemu}
+作为模拟器，内核运行 \texttt{nanos-lite}，用户程序由 \texttt{navy-apps} 构建并打包到
+ramdisk 中。系统启动后，内核加载 \texttt{/bin/dterm} 作为用户态命令行环境，用户可通过
+shell 命令触发文件读写、内存信息查看、用户程序执行和关机等操作。
+
+从系统结构上看，本项目采用如下运行链路：
+\begin{center}
+\texttt{NEMU} $\rightarrow$ \texttt{nanos-lite main()} $\rightarrow$ 子系统初始化
+$\rightarrow$ \texttt{proc\_execve("/bin/dterm")} $\rightarrow$ 用户态 shell
+\end{center}
+其中，\texttt{nanos-lite} 负责内核态资源管理和系统调用分发，\texttt{dterm} 负责提供
+可交互演示界面，ramdisk 和 RAMFS 共同构成当前阶段的简化文件系统基础。
+
+\section{项目整体目标}
+
+项目总体目标是在模拟器中实现一个稳定可复现的简化操作系统内核，并通过命令行
+演示其核心功能。围绕课程要求，本组将最终目标分解为以下五类能力：
+
+\begin{enumerate}
+  \item \textbf{系统启动能力：} 能够在 \texttt{riscv32-nemu} 中加载内核镜像，进入
+  \texttt{nanos-lite} 主函数，按顺序完成内存、设备、ramdisk、中断、文件系统和进程模块初始化。
+  \item \textbf{中断与系统调用能力：} 支持用户态通过 \texttt{ecall} 进入内核态，并完成
+  \texttt{open/read/write/lseek/close/gettimeofday/execve/exit/shutdown} 等系统调用。
+  \item \textbf{内存管理能力：} 以 4KB 页为单位管理物理内存，提供页分配、简化释放和内存使用统计。
+  \item \textbf{文件系统能力：} 基于 ramdisk 和 RAMFS 支持文件创建、删除、打开、关闭、读写、追加和 seek，
+  并通过 \texttt{/proc/meminfo}、\texttt{/proc/files} 提供内核状态信息。
+  \item \textbf{用户程序与演示能力：} 支持 ELF 用户程序加载，提供 shell 命令解释器，并逐步形成
+  包含文本程序、测试程序和图形程序的最终答辩演示流程。
+\end{enumerate}
+
+按当前分工，项目计划覆盖课程文件中的系统启动、中断与异常处理、内存管理、文件系统、
+用户程序加载与执行等模块；进程管理先采用单进程 \texttt{execve} 替换模型进行展示，
+多进程调度作为后续扩展方向。
+
+\section{成员分工}
+
+本组采用 A $\rightarrow$ B $\rightarrow$ C 的接力式开发方式，先保证底层主线稳定，
+再补充资源管理和文件系统，最后由用户态程序与 shell 命令形成答辩闭环。
+
+\begin{table}[htbp]
+\centering
+\caption{项目成员分工与交付边界}
+\begin{tabular}{p{1.3cm}p{3.2cm}p{5.2cm}p{4.2cm}}
+\toprule
+成员 & 负责模块 & 主要任务 & 当前状态 \\
+\midrule
+A & 系统启动、中断、系统调用、主线集成
+& 维护 \texttt{main.c} 初始化顺序；处理 \texttt{ecall}、时钟事件和异常路径；
+实现主要系统调用；保证系统进入 \texttt{/bin/dterm} 并可正常关机。
+& 已完成。系统可启动进入 shell，系统调用主链路可用，可运行 PAL 图形演示。 \\
+\midrule
+B & 内存管理、RAMFS 文件系统、\texttt{/proc} 信息
+& 实现 4KB 页分配和内存统计；扩展 RAMFS；支持文件创建、读写、追加、删除和 seek；
+维护 \texttt{/proc/meminfo}、\texttt{/proc/files} 与目录视图。
+& 已完成。内存信息、\texttt{/proc}、\texttt{/home} 和 RAMFS 读写删除流程均已有截图验证。 \\
+\midrule
+C & ELF 加载、用户程序、shell 命令、最终演示
+& 完善 ELF 加载与用户态栈；维护 \texttt{help/ls/cat/meminfo/uptime/ps/run/shutdown}
+等命令；打包并运行至少 5 个用户程序；整理最终演示脚本和答辩材料。
+& 计划中。当前仅完成接口和演示基础，完整 C 阶段交付属于后续工作。 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{当前进度}
+
+\subsection{成员 A：系统主线已完成}
+
+成员 A 已完成系统启动和系统调用主线，使项目具备后续开发所需的稳定运行基线。
+当前系统能够从 NEMU 启动进入 \texttt{nanos-lite}，完成内存、设备、ramdisk、中断、
+文件系统和进程模块初始化，并自动加载 \texttt{/bin/dterm}。在 shell 中，\texttt{help}、
+\texttt{uptime}、\texttt{ps}、\texttt{shutdown} 等命令已经能够运行，表明用户态到内核态
+系统调用链路已经打通。
+
+从功能上看，成员 A 阶段已经完成三条关键链路：第一，启动链路
+\texttt{NEMU -> nanos-lite -> dterm} 可复现；第二，系统调用链路
+\texttt{dterm -> libos -> ecall -> syscall.c -> 内核服务} 可用；第三，程序执行链路
+\texttt{run pal -> execve -> loader -> PAL} 已具备阶段性演示效果。当前进程模型仍为
+单进程 \texttt{execve} 替换模型，外部程序退出后由内核重新加载 \texttt{/bin/dterm}。
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.47\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{1.png}
+  \caption{启动进入 DTerm 并显示内建命令}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.47\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{PAL.png}
+  \caption{通过 \texttt{execve} 运行 PAL 图形程序}
+\end{subfigure}
+\caption{成员 A 阶段演示截图}
+\end{figure}
+
+\subsection{成员 B：内存管理与文件系统已完成}
+
+成员 B 已完成内存管理、RAMFS 和 \texttt{/proc} 信息展示的阶段性目标。内存管理部分
+采用 4KB 页作为分配单位，\texttt{new\_page()} 对分配页面进行清零，\texttt{free\_page()}
+支持最近一次分配块的简化回收，\texttt{get\_memory\_info()} 可统计总内存、已用内存和
+空闲内存。上述信息通过 \texttt{/proc/meminfo} 暴露给用户态，shell 的 \texttt{meminfo}
+命令可以直接展示内核内存状态。
+
+文件系统部分在静态 ramdisk 的基础上增加运行期 RAMFS。当前 RAMFS 支持最多 128 个
+动态文件，单文件最大 64KB，满足课程题目中关于文件数量和单文件大小的基本指标。
+用户可通过 \texttt{touch}、\texttt{write}、\texttt{append}、\texttt{cat}、\texttt{rm} 完成文件
+创建、覆盖写、追加写、读取和删除；删除后的文件再次读取会返回不存在提示。
+此外，\texttt{/proc} 目录能够展示 \texttt{meminfo} 和 \texttt{files}，\texttt{/home/welcome.txt}
+能够从构建时根目录进入 ramdisk 并在系统中读取。
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.47\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{01_meminfo_proc_home.png}
+  \caption{\texttt{/proc/meminfo}、\texttt{/proc} 与 \texttt{/home} 展示}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.47\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{02_ramfs_rw_rm.png}
+  \caption{RAMFS 文件创建、写入、追加、读取和删除}
+\end{subfigure}
+\caption{成员 B 阶段演示截图}
+\end{figure}
+
+\subsection{成员 C：后续工作范围}
+
+成员 C 的内容属于后续阶段，当前报告不将其列为已完成成果。根据分工方案，成员 C 将在
+A、B 已完成的系统调用、内存和文件系统基础上，继续完善用户程序加载与执行、shell 命令
+体验和最终答辩演示流程。后续重点包括：完善 ELF 加载边界检查和参数传递；维护
+\texttt{help/ls/cat/echo/meminfo/uptime/ps/run/shutdown} 等命令；保证 \texttt{hello}、
+\texttt{timer-test}、\texttt{file-test}、\texttt{pal} 等用户程序可稳定运行；整理截图、视频和
+最终汇报脚本。
+
+\section{课程要求对照}
+
+\begin{table}[htbp]
+\centering
+\caption{课程要求与当前项目进度对照}
+\begin{tabular}{p{3.2cm}p{7.4cm}p{2.3cm}}
+\toprule
+课程模块 & 本项目实现或计划实现内容 & 状态 \\
+\midrule
+系统启动 & NEMU 启动内核，进入 \texttt{main()}，完成多子系统初始化并加载 \texttt{/bin/dterm}。 & 已完成 \\
+中断与异常处理 & 处理 \texttt{ecall} 系统调用、时钟事件、yield 和关机路径。 & 已完成 \\
+内存管理 & 4KB 页分配、简化释放、内存使用统计、\texttt{/proc/meminfo}。 & 已完成 \\
+文件系统 & ramdisk、RAMFS、文件描述符、目录视图、\texttt{/proc/files}、文件读写删除。 & 已完成 \\
+进程管理 & 当前为单进程 \texttt{execve} 替换模型，\texttt{ps} 可展示模型；多进程调度待扩展。 & 部分完成 \\
+用户程序加载与执行 & 已具备 PAL 阶段性演示基础；完整 shell、参数传递和至少 5 个程序演示待 C 阶段完成。 & 进行中 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+截至本次进度汇报，项目已经形成从启动到 shell、从系统调用到文件系统、从内存统计到
+RAMFS 读写删除的可操作闭环。已完成内容能够支撑后续成员 C 继续完成用户态程序和最终
+答辩演示。
+
+\section{后续计划}
+
+下一阶段工作将围绕成员 C 的交付展开，重点是把已有底层能力组织成稳定、直观、可重复的
+最终演示流程。计划任务包括：
+\begin{enumerate}
+  \item 完善 \texttt{run} 命令和用户程序打包列表，确保至少 5 个用户程序或演示程序进入
+  \texttt{/bin} 并可运行。
+  \item 补充 shell 命令的错误处理，使未知命令、文件不存在、程序加载失败等情况不会破坏演示环境。
+  \item 整理最终验收命令序列，例如 \texttt{help}、\texttt{ls /bin}、\texttt{cat /home/welcome.txt}、
+  \texttt{meminfo}、\texttt{touch/write/append/cat/rm}、\texttt{run hello}、\texttt{run pal}、
+  \texttt{shutdown}。
+  \item 形成最终答辩材料，明确说明本项目是运行在模拟器上的简化 OS 内核，不是完整 Linux 系统。
+\end{enumerate}
+
+\section{结论}
+
+本阶段项目已经完成 A、B 两个成员的主要任务，具备稳定启动、系统调用、内存统计、
+RAMFS 文件系统和 \texttt{/proc} 信息展示能力。当前成果覆盖了课程题目中多个核心模块，
+并为后续成员 C 的用户程序加载、shell 命令完善和最终演示闭环提供了清晰接口与运行基础。
+后续应继续以稳定性和可演示性为优先目标，在不扩大不必要风险的前提下完成用户态程序
+和答辩材料整合。
+
+\end{document}
