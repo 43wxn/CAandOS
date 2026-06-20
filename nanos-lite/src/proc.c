@@ -4,6 +4,7 @@
 #include <string.h>
 #include <memory.h>
 #include <arch/riscv.h>
+#include <am.h>
 
 void naive_uload(PCB *pcb, const char *filename, int argc, char *const argv[]);
 
@@ -255,9 +256,10 @@ Context* schedule(Context *prev) {
   return proc_schedule(prev);
 }
 
-/* ---- 多线程演示 ---- */
-static char demo_log_buf[2048];
+/* ---- 多线程演示：连续运行，ESC 停止 ---- */
+static char demo_log_buf[4096];
 static int  demo_log_len = 0;
+static volatile int demo_running = 0;
 
 static void demo_log_append(const char *fmt, ...) {
   if (demo_log_len >= (int)sizeof(demo_log_buf) - 128) return;
@@ -271,35 +273,59 @@ static void demo_log_append(const char *fmt, ...) {
 
 static void demo_thread(void *arg) {
   const char *name = (const char *)arg;
-  for (int i = 0; i < 3; i++) {
-    demo_log_append("[%s] tick=%d  <-- running on CPU\n", name, i);
-    Log("[%s] tick=%d  <-- running on CPU", name, i);
+  int tick = 0;
+  while (demo_running) {
+    demo_log_append("[%s] tick=%d\n", name, tick);
+    Log("[%s] tick=%d  <-- running on CPU", name, tick);
+    tick++;
     yield();
   }
-  demo_log_append("[%s] finished, exiting\n", name);
-  Log("[%s] finished, exiting", name);
+  demo_log_append("[%s] stopped (tick=%d total)\n", name, tick);
+  Log("[%s] stopped after %d ticks", name, tick);
   proc_thread_exit(0);
 }
 
 int proc_start_demo(void) {
   demo_log_len = 0;
   demo_log_append("=== Round-Robin Scheduler Demo ===\n");
-  demo_log_append("Creating 3 kernel threads: logger, worker, watchdog\n");
-  demo_log_append("Each thread prints its name + tick, then yields CPU\n\n");
+  demo_log_append("3 threads running continuously...\n");
+  demo_log_append("Press ESC in NEMU window to stop\n\n");
 
   next_pid = 10;
+  demo_running = 1;
   int a = proc_create_thread("logger",  demo_thread, (void *)"logger");
   int b = proc_create_thread("worker",  demo_thread, (void *)"worker");
   int c = proc_create_thread("watchdog", demo_thread, (void *)"watchdog");
 
-  demo_log_append("Threads created (pid %d/%d/%d). Starting scheduler...\n\n", a, b, c);
-  Log("demo: created logger=%d worker=%d watchdog=%d, yielding...", a, b, c);
+  if (a <= 0 || b <= 0 || c <= 0) {
+    demo_running = 0;
+    return -1;
+  }
 
-  yield();
+  demo_log_append("Threads created. Scheduler running...\n\n");
+  Log("demo: logger=%d worker=%d watchdog=%d  (ESC to stop)", a, b, c);
 
-  demo_log_append("\n=== All threads finished, back to shell ===\n");
-  Log("demo: all threads finished, back to shell");
-  return (a > 0 && b > 0 && c > 0) ? 0 : -1;
+  /*
+   * 主循环：yield 让线程运行，被调度回来时检查键盘。
+   * dterm (pcb[2]) 和 3 个线程一起参与 Round-Robin 轮转。
+   */
+  while (demo_running) {
+    yield();
+    /* 检查是否有按键 */
+    AM_INPUT_KEYBRD_T ev = io_read(AM_INPUT_KEYBRD);
+    if (ev.keycode == AM_KEY_ESCAPE && ev.keydown) {
+      demo_running = 0;
+      demo_log_append("\n*** ESC pressed — stopping demo ***\n");
+      Log("demo: ESC pressed, stopping all threads");
+    }
+  }
+
+  /* 等待所有线程退出（每个线程需被调度一次才能看到 demo_running=0） */
+  for (int i = 0; i < 20; i++) yield();
+
+  demo_log_append("\n=== Demo finished, back to shell ===\n");
+  Log("demo: all threads stopped, back to shell");
+  return 0;
 }
 
 /* 供 shell 读取 demo 输出 */
