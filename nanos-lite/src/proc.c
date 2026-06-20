@@ -11,12 +11,6 @@ void naive_uload(PCB *pcb, const char *filename, int argc, char *const argv[]);
 
 static PCB pcb[MAX_NR_PROC] __attribute__((used)) = {};
 static char current_name[128] = DEFAULT_USER_PROGRAM;
-static PCB pcb_boot = {
-  .pid = PROC_SINGLE_PID,
-  .ppid = 0,
-  .state = PROC_RUNNING,
-  .name = current_name,
-};
 PCB *current = NULL;
 
 static void proc_set_name(const char *name) {
@@ -27,24 +21,23 @@ static void proc_set_name(const char *name) {
 }
 
 void switch_boot_pcb() {
-  current = &pcb_boot;
-  proc_set_name(DEFAULT_USER_PROGRAM);
+  /*
+   * 将 dterm shell 放入 pcb[] 数组（槽位 2），使其参与调度器的轮转查找。
+   * pcb[0]=idle, pcb[1]=init 仅用于 ps 展示，始终 RUNNING 不会被调度。
+   */
+  current = &pcb[2];
+  pcb[2].pid = PROC_SINGLE_PID;
+  pcb[2].ppid = 0;
+  pcb[2].state = PROC_RUNNING;
+  pcb[2].name = current_name;
 }
 
 void init_proc() {
   switch_boot_pcb();
   Log("Initializing processes...");
 
-  // 填充 PCB 数组以支持 ps 多进程显示
-  pcb[0].pid = 0;
-  pcb[0].ppid = 0;
-  pcb[0].state = PROC_RUNNING;  /* idle — 仅供 ps 展示，调度器跳过 RUNNING 状态 */
-  pcb[0].name = "[idle]";
-
-  pcb[1].pid = 1;
-  pcb[1].ppid = 0;
-  pcb[1].state = PROC_RUNNING;  /* init — 仅供 ps 展示，不参与调度 */
-  pcb[1].name = "[init]";
+  pcb[0].pid = 0; pcb[0].ppid = 0; pcb[0].state = PROC_RUNNING; pcb[0].name = "[idle]";
+  pcb[1].pid = 1; pcb[1].ppid = 0; pcb[1].state = PROC_RUNNING; pcb[1].name = "[init]";
 
   proc_execve(DEFAULT_USER_PROGRAM, NULL, NULL);
   panic("init_proc: failed to load %s", DEFAULT_USER_PROGRAM);
@@ -214,7 +207,18 @@ int proc_create_thread(const char *name, void (*entry)(void *), void *arg) {
 }
 
 void proc_thread_exit(int status) {
-  proc_exit_current(status);
+  /*
+   * 内核线程退出：标记 ZOMBIE 然后 yield 触发调度器。
+   * 调度器跳过 ZOMBIE 进程，找到 dterm (pcb[2]) 切回。
+   * 不调用 proc_execve — 那样会丢弃当前 dterm 状态。
+   */
+  if (current != NULL) {
+    current->exit_status = status;
+    current->state = PROC_ZOMBIE;
+  }
+  yield();
+  /* 不应该回到这里 — 调度器会切到其他进程 */
+  while (1) {}
 }
 
 Context *proc_schedule(Context *prev) {
@@ -229,16 +233,16 @@ Context *proc_schedule(Context *prev) {
     int i = (last_idx + n) % MAX_NR_PROC;
     if (pcb[i].state == PROC_RUNNABLE) {
       last_idx = (i + 1) % MAX_NR_PROC;
-      pcb[i].state = PROC_RUNNING;
-      PCB *next = &pcb[i];
-      Log("proc_schedule: found pid=%d cp=%p mepc=%p sp=%p",
-          next->pid, next->cp,
-          (void *)next->cp->mepc, (void *)next->cp->gpr[2]);
-      if (current != next) {
-        current = next;
-        return next->cp;
+      if (&pcb[i] != current) {
+        /* 找到了不同于当前进程的就绪进程 → 切换 */
+        pcb[i].state = PROC_RUNNING;
+        current = &pcb[i];
+        Log("proc_schedule: switch to pid=%d name=%s mepc=%p sp=%p",
+            current->pid, current->name,
+            (void *)current->cp->mepc, (void *)current->cp->gpr[2]);
+        return current->cp;
       }
-      return prev; /* same process, no switch */
+      /* 同一个进程，跳过，继续找其他进程 */
     }
   }
 
@@ -251,17 +255,37 @@ Context* schedule(Context *prev) {
   return proc_schedule(prev);
 }
 
-/* ---- 多线程演示：仅用于 ps 展示和调度器验证 ---- */
+/* ---- 多线程演示 ---- */
 static void demo_thread(void *arg) {
-  while (1) yield();
+  const char *name = (const char *)arg;
+  /*
+   * 每个线程输出 3 次，每次 yield 让出 CPU，
+   * 可以看到调度器在多个线程之间轮转。
+   */
+  for (int i = 0; i < 3; i++) {
+    Log("[%s] tick=%d  <-- running on CPU", name, i);
+    yield();
+  }
+  Log("[%s] finished, exiting", name);
+  proc_thread_exit(0);
 }
 
 int proc_start_demo(void) {
   next_pid = 10;
-  int a = proc_create_thread("logger",  demo_thread, NULL);
-  int b = proc_create_thread("worker",  demo_thread, NULL);
-  int c = proc_create_thread("watchdog", demo_thread, NULL);
-  Log("demo: logger=%d worker=%d watchdog=%d", a, b, c);
+  int a = proc_create_thread("logger",  demo_thread, (void *)"logger");
+  int b = proc_create_thread("worker",  demo_thread, (void *)"worker");
+  int c = proc_create_thread("watchdog", demo_thread, (void *)"watchdog");
+  Log("demo: created 3 threads (logger=%d worker=%d watchdog=%d)", a, b, c);
+  Log("demo: yielding to start Round-Robin scheduling...");
+  /*
+   * yield() 保存当前 dterm Context → schedule() 切换到第一个就绪线程。
+   * 各线程打印 Log → yield → scheduler 轮转到下一个线程。
+   * 线程调用 proc_thread_exit() → 标记 ZOMBIE → yield → scheduler 跳过它。
+   * 所有线程退出后，scheduler 找到 dterm (pcb[2]) RUNNABLE，切回来。
+   * dterm 从 yield() 返回，继续正常运行。
+   */
+  yield();
+  Log("demo: all threads finished, back to shell");
   return (a > 0 && b > 0 && c > 0) ? 0 : -1;
 }
 
@@ -278,7 +302,7 @@ int proc_get_process_list(char *buf, size_t bufsz) {
   int pos = 0;
   pos = proc_append(buf, bufsz, pos, "PID  PPID STATE      COMMAND\n");
 
-  // 遍历所有 PCB 条目：idle → init → current → 其他
+  // 遍历所有 PCB 条目：idle → init → dterm → 其他
   for (int i = 0; i < MAX_NR_PROC; i++) {
     if (pcb[i].state == PROC_UNUSED && &pcb[i] != current) continue;
 
@@ -296,16 +320,6 @@ int proc_get_process_list(char *buf, size_t bufsz) {
     if (nm == NULL || (uintptr_t)nm < 0x80000000) nm = "(unknown)";
     pos = proc_append(buf, bufsz, pos, "%d %d %s %s\n",
         p->pid, p->ppid, s, nm);
-  }
-
-  // 还有 pcb_boot（实际的 dterm 进程）
-  if (current != NULL) {
-    const char *s = "running";
-    if (current->state == PROC_ZOMBIE) s = "zombie";
-    const char *cnm = current->name;
-    if (cnm == NULL || (uintptr_t)cnm < 0x80000000) cnm = "(shell)";
-    pos = proc_append(buf, bufsz, pos, "%d %d %s %s\n",
-        current->pid, current->ppid, s, cnm);
   }
 
   return pos;
