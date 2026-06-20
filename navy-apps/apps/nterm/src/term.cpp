@@ -54,7 +54,7 @@ void Terminal::esc_move(int *args) {
 }
 
 void Terminal::esc_movefirst(int *args) {
-  cursor = { .x = 0, .y = 0 };
+  cursor = { .x = 0, .y = 3 };  /* 从状态栏下方开始 */
 }
 
 void Terminal::esc_moveup(int *args) {
@@ -82,11 +82,12 @@ void Terminal::esc_restore(int *args) {
 }
 
 void Terminal::esc_clear(int *args) {
+  /* 只清除第 3 行及以下，保护顶部状态栏 */
   for (int i = 0; i < w; i ++)
-    for (int j = 0; j < h; j ++) {
+    for (int j = 3; j < h; j ++) {
       putch(i, j, EMPTY);
     }
-  cursor = {.x = 0, .y = 0};
+  cursor = {.x = 0, .y = 3};
 }
 
 void Terminal::esc_setattr1(int *args) {
@@ -140,7 +141,7 @@ void Terminal::esc_cookmode(int *args) {
 Terminal::Terminal(int width, int height) {
   w = width; h = height;
   mode = Mode::cook;
-  cursor = {.x = 0, .y = 0};
+  cursor = {.x = 0, .y = 3};  /* 从状态栏下方开始 */
   saved = cursor;
   buf = new char[w * h];
   color = new uint8_t[w * h];
@@ -151,7 +152,7 @@ Terminal::Terminal(int width, int height) {
   input[0] = '\0';
 
   for (int x = 0; x < w; x ++) {
-    for (int y = 0; y < h; y ++) {
+    for (int y = 3; y < h; y ++) {
       putch(x, y, EMPTY);
     }
   }
@@ -190,12 +191,13 @@ void Terminal::move_one() {
 }
 
 void Terminal::scroll_up() {
-  memmove(buf, buf + w, w * (h - 1));
-  memmove(color, color + w, w * (h - 1));
+  /* 只滚动第 3 行及以下，保护顶部状态栏 (行 0-2) */
+  memmove(buf + 3 * w, buf + 4 * w, w * (h - 4));
+  memmove(color + 3 * w, color + 4 * w, w * (h - 4));
   for (int i = 0; i < w; i ++) {
     putch(i, h - 1, EMPTY);
   }
-  for (int i = 0; i < w * h; i ++) {
+  for (int i = 3 * w; i < w * h; i ++) {
     dirty[i] = true;
   }
 }

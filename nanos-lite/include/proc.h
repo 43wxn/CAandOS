@@ -32,7 +32,7 @@ extern PCB *current;
 void switch_boot_pcb();
 void init_proc();
 Context* schedule(Context *prev);
-void naive_uload(PCB *pcb, const char *filename);
+void naive_uload(PCB *pcb, const char *filename, int argc, char *const argv[]);
 
 /*
  * 当前阶段仍是单进程模型，但先把未来多任务/线程调度需要的接口列出来。
@@ -42,11 +42,13 @@ int proc_getpid(void);
 const char *proc_get_name(void);
 void proc_exit_current(int status);
 int proc_execve(const char *filename, char *const argv[], char *const envp[]);
-int proc_fork(void);
+int proc_fork(Context *c);
 int proc_wait(int *status);
 int proc_kill(int pid, int sig);
 int proc_create_thread(const char *name, void (*entry)(void *), void *arg);
 void proc_thread_exit(int status);
 Context *proc_schedule(Context *prev);
+int proc_get_process_list(char *buf, size_t bufsz);
+int proc_start_demo(void);
 
 #endif

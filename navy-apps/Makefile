@@ -178,8 +178,8 @@ $(CLEAN_ALL):
 
 ### Build fsimg and ramdisk for Nanos-lite
 OS_ROOT ?= $(NAVY_HOME)/../os-root
-APPS = nterm bird pal
-TESTS = hello timer-test file-test event-test dummy
+APPS = nterm bird pal edit cc
+TESTS = hello timer-test file-test event-test dummy touch-test rr-demo
 
 prepare-fsimg:
 	@mkdir -p $(NAVY_HOME)/fsimg/bin $(NAVY_HOME)/fsimg/share/games

@@ -15,7 +15,23 @@ static void emit_char(char **out, char *end, int *cnt, char ch, bool bounded) {
 }
 
 static void emit_str(char **out, char *end, int *cnt, const char *s, bool bounded) {
-  if (s == NULL) s = "(null)";
+  /*
+   * Guard against obviously invalid pointers that are not NULL.
+   * Any address below 64 KB is certainly not a valid string pointer
+   * on any reasonable platform and almost always indicates a bug
+   * (e.g. a small integer being passed as a %s argument).
+   */
+  if (s == NULL || (uintptr_t)s < 0x10000) {
+    if (s != NULL) {
+      /* Only print the diagnostic once; the value is useful for debugging. */
+      static int warn_cnt = 0;
+      if (warn_cnt < 8) {
+        printf("[emit_str] WARNING: invalid string pointer %p\n", s);
+        warn_cnt++;
+      }
+    }
+    s = "(null)";
+  }
   while (*s) {
     emit_char(out, end, cnt, *s++, bounded);
   }
@@ -149,6 +165,15 @@ static int format_to_buffer(char *out, size_t n, const char *fmt, va_list ap) {
 
       case 's': {
         const char *s = va_arg(ap, const char *);
+        /* Catch obviously bogus string pointers early for debugging. */
+        if (s != NULL && (uintptr_t)s < 0x10000) {
+          static int warn_s = 0;
+          if (warn_s < 5) {
+            printf("[format_to_buffer %%s] WARNING: string ptr %p, fmt near \"%s\"\n",
+                   s, fmt > (const char *)0x80000000 ? fmt : "(unknown)");
+            warn_s++;
+          }
+        }
         if (!discard_only) emit_str(&p, end, &cnt, s, bounded);
         else {
           if (s == NULL) s = "(null)";

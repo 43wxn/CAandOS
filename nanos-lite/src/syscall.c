@@ -1,6 +1,7 @@
 #include <common.h>
 #include <am.h>
 #include <fs.h>
+#include <memory.h>
 #include "syscall.h"
 #include "proc.h"
 
@@ -88,7 +89,6 @@ void do_syscall(Context *c) {
       break;
 
     case SYS_yield:
-      /* yield 本身没有有意义的返回值，约定返回 0。 */
       c->GPRx = 0;
       yield();
       break;
@@ -164,10 +164,11 @@ void do_syscall(Context *c) {
     case SYS_brk:
       /*
        * Navy 的 malloc/newlib 会通过 sbrk/brk 申请堆空间。
-       * 当前 nanos-lite 还没有真正维护用户进程的 brk 边界，
-       * 因此先返回 0 表示“请求被接受”，实际堆增长由 libos 侧模拟。
+       * mm_brk() 会检查用户态 brk 是否越界进入内核堆区域，
+       * 防止用户 malloc 覆盖 new_page 分配的页面（fork 子进程上下文等）。
+       * 返回 0 表示成功，-1 表示被拒绝（内存不足或越界）。
        */
-      c->GPRx = 0;
+      c->GPRx = mm_brk((uintptr_t)a[1]);
       break;
 
     case SYS_gettimeofday: {
@@ -253,11 +254,7 @@ void do_syscall(Context *c) {
 
 
     case SYS_fork:
-      /*
-       * fork()
-       * 预留多进程接口：未来需要复制 PCB、地址空间和用户态 Context。
-       */
-      c->GPRx = proc_fork();
+      c->GPRx = proc_fork(c);
       break;
 
     case SYS_link:
@@ -282,8 +279,11 @@ void do_syscall(Context *c) {
       break;
 
     case SYS_shutdown:
-      /* shell 的 shutdown/poweroff 命令最终会走到这里让 NEMU halt。 */
       halt((int)a[1]);
+      break;
+
+    case SYS_demo:
+      c->GPRx = proc_start_demo();
       break;
 
     default:

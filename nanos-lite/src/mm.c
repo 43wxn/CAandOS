@@ -3,6 +3,49 @@
 static void *pf = NULL;
 static void *pf_start = NULL;
 
+/* ---- user-space brk tracking ---- */
+static uintptr_t current_brk = 0;
+
+void set_initial_brk(uintptr_t brk) {
+  current_brk = brk;
+  Log("initial brk set to %p", (void *)brk);
+}
+
+int mm_brk(uintptr_t brk) {
+  /*
+   * First brk call from user space initialises the break to whatever
+   * sbrk(0) computes (typically _end rounded up).  We just record it.
+   */
+  if (current_brk == 0) {
+    current_brk = brk;
+    return 0;
+  }
+
+  /*
+   * The kernel bump allocator grows upward from heap.start.
+   * User programs are loaded at their own ELF vaddr, typically above
+   * the kernel region, so user sbrk also grows upward from _end.
+   *
+   * The only real collision risk is when user brk is requested within
+   * the kernel's heap window [heap.start .. pf).  For user programs
+   * loaded at high vaddr (above pf), this check always passes because
+   * brk > pf, so brk is never in [heap.start, pf).
+   */
+  uintptr_t kernel_top = (uintptr_t)pf;
+
+  if (brk > current_brk && brk >= (uintptr_t)heap.start && brk < kernel_top) {
+    Log("mm_brk: rejected brk=%p (overlaps kernel heap [%p..%p))",
+        (void *)brk, heap.start, (void *)kernel_top);
+    return -1;
+  }
+
+  if (brk >= current_brk) {
+    current_brk = brk;
+  }
+  /* shrinking the break is always allowed */
+  return 0;
+}
+
 #define MAX_PAGE_ALLOCS 1024
 
 typedef struct {
@@ -66,11 +109,6 @@ void free_page(void *p) {
   }
 
   Log("free_page: non-LIFO block %p ignored by bump allocator", p);
-}
-
-/* The brk() system call handler. */
-int mm_brk(uintptr_t brk) {
-  return 0;
 }
 
 void get_memory_info(size_t *total, size_t *used, size_t *free) {

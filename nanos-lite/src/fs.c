@@ -5,6 +5,7 @@
 #include <stdarg.h>
 #include <am.h>
 #include <memory.h>
+#include <proc.h>
 
 /*
  * nanos-lite 的文件系统是一个适合 PA/课程设计演示的“小型 VFS”。
@@ -52,6 +53,7 @@ size_t dispinfo_read(void *buf, size_t offset, size_t len);
 size_t fb_write(const void *buf, size_t offset, size_t len);
 static size_t proc_meminfo_read(void *buf, size_t offset, size_t len);
 static size_t proc_files_read(void *buf, size_t offset, size_t len);
+static size_t proc_processes_read(void *buf, size_t offset, size_t len);
 
 typedef struct {
   char *name;          /* 文件名或设备名，例如 /bin/dterm、/dev/fb。 */
@@ -76,7 +78,8 @@ enum {
   FD_SB,
   FD_SBCTL,
   FD_MEMINFO,
-  FD_FILES
+  FD_FILES,
+  FD_PROCESSES
 };
 
 static size_t invalid_read(void *buf, size_t offset, size_t len) {
@@ -168,7 +171,7 @@ static size_t sb_write(const void *buf, size_t offset, size_t len) {
     if (n > (size_t)free_bytes) n = (size_t)free_bytes;
 
     if (cnt < 20) {
-      printf("[sb_write] bufsize=%d used=%d free=%d write=%zu\n",
+      printf("[sb_write] bufsize=%d used=%d free=%d write=%u\n",
           cfg.bufsize, stat.count, free_bytes, n);
       cnt++;
     }
@@ -219,6 +222,7 @@ static Finfo file_table[] __attribute__((used)) = {
   [FD_SBCTL]    = {"/dev/sbctl",     0, 0, sbctl_read,    sbctl_write,   0}, /* 声卡控制/状态设备。 */
   [FD_MEMINFO]  = {"/proc/meminfo",  0, 0, proc_meminfo_read, invalid_write, 0}, /* 动态生成内存信息。 */
   [FD_FILES]    = {"/proc/files",    0, 0, proc_files_read,   invalid_write, 0}, /* 动态生成文件表清单。 */
+  [FD_PROCESSES] = {"/proc/processes",0, 0, proc_processes_read, invalid_write, 0}, /* 动态生成进程表。 */
   /*
    * files.h 由 navy-apps 构建 ramdisk 时生成，里面会继续追加：
  *   /bin/dterm、/bin/pal、/share/games/pal/...、/home/welcome.txt 等
@@ -318,13 +322,21 @@ static int alloc_ramfs_file(const char *pathname) {
  */
 static bool ramfs_grow(Finfo *f, size_t need) {
   if (need <= f->capacity) return true;
-  if (need > RAMFS_MAX_FILE_SIZE) return false;
+  if (need > RAMFS_MAX_FILE_SIZE) {
+    Log("ramfs_grow: %s — need=%u exceeds RAMFS_MAX_FILE_SIZE=%u",
+        f->name, (unsigned)need, (unsigned)RAMFS_MAX_FILE_SIZE);
+    return false;
+  }
 
   size_t new_cap = ROUNDUP(need, PGSIZE);
   if (new_cap > RAMFS_MAX_FILE_SIZE) new_cap = RAMFS_MAX_FILE_SIZE;
 
   uint8_t *new_data = new_page(new_cap / PGSIZE);
-  if (new_data == NULL) return false;
+  if (new_data == NULL) {
+    Log("ramfs_grow: %s — new_page(%u pages) failed (need=%u, cap=%u)",
+        f->name, (unsigned)(new_cap / PGSIZE), (unsigned)need, (unsigned)f->capacity);
+    return false;
+  }
 
   if (f->data != NULL && f->size > 0) {
     memcpy(new_data, f->data, f->size);
@@ -350,6 +362,16 @@ static int ramfs_file_count(void) {
     if (ramfs[i].name != NULL) count++;
   }
   return count;
+}
+
+/*
+ * /proc/processes 动态生成进程表，供 shell 的 ps 命令使用。
+ */
+static size_t proc_processes_read(void *buf, size_t offset, size_t len) {
+  static char info[2048];
+  int n = proc_get_process_list(info, sizeof(info));
+  if (n < 0) return 0;
+  return slice_read(info, (size_t)n, buf, offset, len);
 }
 
 /*
@@ -409,13 +431,13 @@ static size_t proc_files_read(void *buf, size_t offset, size_t len) {
     } else if (i == FD_DISPINFO || i == FD_MEMINFO || i == FD_FILES) {
       type = "proc";
     }
-    pos = append_proc_line(info, sizeof(info), pos, "%-7s %7u %s\n",
+    pos = append_proc_line(info, sizeof(info), pos, "%s %u %s\n",
         type, (unsigned)file_table[i].size, file_table[i].name);
   }
 
   for (int i = 0; i < RAMFS_MAX_FILES && pos < sizeof(info); i++) {
     if (ramfs[i].name != NULL) {
-      pos = append_proc_line(info, sizeof(info), pos, "%-7s %7u %s\n",
+      pos = append_proc_line(info, sizeof(info), pos, "%s %u %s\n",
           "ramfs", (unsigned)ramfs[i].size, ramfs[i].name);
     }
   }
