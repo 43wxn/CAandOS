@@ -1391,7 +1391,13 @@ static void sh_handle_cmd(const char *cmd) {
     sh_error("shell", "Please login first: login User1 | User2 | User3\n");
   } else if (strcmp(argv[0], "demo") == 0) {
     _syscall_(SYS_demo, 0, 0, 0);
-    sh_printf(CLR_GREEN "Demo threads created. Type 'ps' to see them." CLR_RESET "\n");
+    /* 从内核固定地址读取调度日志并显示在 shell 中 */
+    const char *log = (const char *)0x8FFE0000;
+    if (log[0] != '\0') {
+      sh_printf("%s", log);
+    } else {
+      sh_printf(CLR_GREEN "Demo threads finished." CLR_RESET "\n");
+    }
   } else if (strcmp(argv[0], "chat") == 0 || strcmp(argv[0], "ai") == 0) {
     cmd_chat();
     sh_prompt();

@@ -9,6 +9,7 @@
  */
 #define DEFAULT_USER_PROGRAM "/bin/dterm"
 #define PROC_SINGLE_PID 1
+#define USER_DEMO_LOG_ADDR 0x8FFE0000
 
 typedef enum {
   PROC_UNUSED = 0,
@@ -50,5 +51,6 @@ void proc_thread_exit(int status);
 Context *proc_schedule(Context *prev);
 int proc_get_process_list(char *buf, size_t bufsz);
 int proc_start_demo(void);
+int proc_get_demo_log(char *buf, size_t bufsz);
 
 #endif

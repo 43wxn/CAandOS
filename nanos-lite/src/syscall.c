@@ -284,6 +284,11 @@ void do_syscall(Context *c) {
 
     case SYS_demo:
       c->GPRx = proc_start_demo();
+      /* 将 demo 日志拷贝到用户态固定地址，shell 可直接读取 */
+      {
+        int n = proc_get_demo_log((char *)USER_DEMO_LOG_ADDR, 2048);
+        if (n > 0) Log("SYS_demo: wrote %d bytes demo log to %p", n, (void *)USER_DEMO_LOG_ADDR);
+      }
       break;
 
     default:

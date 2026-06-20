@@ -256,37 +256,59 @@ Context* schedule(Context *prev) {
 }
 
 /* ---- 多线程演示 ---- */
+static char demo_log_buf[2048];
+static int  demo_log_len = 0;
+
+static void demo_log_append(const char *fmt, ...) {
+  if (demo_log_len >= (int)sizeof(demo_log_buf) - 128) return;
+  va_list ap;
+  va_start(ap, fmt);
+  int n = vsnprintf(demo_log_buf + demo_log_len,
+                    sizeof(demo_log_buf) - (size_t)demo_log_len, fmt, ap);
+  va_end(ap);
+  if (n > 0) demo_log_len += n;
+}
+
 static void demo_thread(void *arg) {
   const char *name = (const char *)arg;
-  /*
-   * 每个线程输出 3 次，每次 yield 让出 CPU，
-   * 可以看到调度器在多个线程之间轮转。
-   */
   for (int i = 0; i < 3; i++) {
+    demo_log_append("[%s] tick=%d  <-- running on CPU\n", name, i);
     Log("[%s] tick=%d  <-- running on CPU", name, i);
     yield();
   }
+  demo_log_append("[%s] finished, exiting\n", name);
   Log("[%s] finished, exiting", name);
   proc_thread_exit(0);
 }
 
 int proc_start_demo(void) {
+  demo_log_len = 0;
+  demo_log_append("=== Round-Robin Scheduler Demo ===\n");
+  demo_log_append("Creating 3 kernel threads: logger, worker, watchdog\n");
+  demo_log_append("Each thread prints its name + tick, then yields CPU\n\n");
+
   next_pid = 10;
   int a = proc_create_thread("logger",  demo_thread, (void *)"logger");
   int b = proc_create_thread("worker",  demo_thread, (void *)"worker");
   int c = proc_create_thread("watchdog", demo_thread, (void *)"watchdog");
-  Log("demo: created 3 threads (logger=%d worker=%d watchdog=%d)", a, b, c);
-  Log("demo: yielding to start Round-Robin scheduling...");
-  /*
-   * yield() 保存当前 dterm Context → schedule() 切换到第一个就绪线程。
-   * 各线程打印 Log → yield → scheduler 轮转到下一个线程。
-   * 线程调用 proc_thread_exit() → 标记 ZOMBIE → yield → scheduler 跳过它。
-   * 所有线程退出后，scheduler 找到 dterm (pcb[2]) RUNNABLE，切回来。
-   * dterm 从 yield() 返回，继续正常运行。
-   */
+
+  demo_log_append("Threads created (pid %d/%d/%d). Starting scheduler...\n\n", a, b, c);
+  Log("demo: created logger=%d worker=%d watchdog=%d, yielding...", a, b, c);
+
   yield();
+
+  demo_log_append("\n=== All threads finished, back to shell ===\n");
   Log("demo: all threads finished, back to shell");
   return (a > 0 && b > 0 && c > 0) ? 0 : -1;
+}
+
+/* 供 shell 读取 demo 输出 */
+int proc_get_demo_log(char *buf, size_t bufsz) {
+  if (demo_log_len <= 0) return 0;
+  int copy = demo_log_len < (int)bufsz - 1 ? demo_log_len : (int)bufsz - 1;
+  memcpy(buf, demo_log_buf, (size_t)copy);
+  buf[copy] = '\0';
+  return copy;
 }
 
 static int proc_append(char *buf, size_t bufsz, int pos, const char *fmt, ...) {
